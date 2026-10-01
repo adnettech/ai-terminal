@@ -1,0 +1,20 @@
+# Audit output snapshots — contain hostnames, SSH aliases, project names.
+# Never commit these.
+os-audit*/
+*.tar.gz
+
+# Maintainer's local agent context.
+CLAUDE.md
+
+# Editor / OS noise
+*.swp
+.DS_Store
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# A platform layer is composed in at release time, never committed here.
+lib/common.d/
+verify.d/
+VERSION
