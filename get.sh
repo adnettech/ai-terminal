@@ -45,6 +45,7 @@ if [ ! -e "$DEST" ] && [ -d "$OLD/.git" ] && [ ! -L "$OLD" ]; then
     [ -e "$BAK" ] && BAK="$OLD.pre-ai-terminal.$(date +%Y%m%d%H%M%S)"
     say "moving the old claude-terminal checkout aside → $BAK (kept; delete it once you're happy)"
     mv "$OLD" "$BAK"
+    MOVED=1
 fi
 
 if [ -d "$DEST/.git" ]; then
@@ -72,8 +73,9 @@ else
     say "WARNING: could not check out $REF (local changes in $DEST?) — running the tree as it is"
 fi
 
-# keep the old path working for anything that baked it in (.bashrc hooks, notes)
-if [ ! -e "$OLD" ] && [ "$DEST" != "$OLD" ]; then
+# keep the old path working for anything that baked it in (.bashrc hooks, notes) — only
+# on a box that had the old checkout; a fresh install gets no legacy link
+if [ "${MOVED:-0}" = 1 ] && [ ! -e "$OLD" ] && [ "$DEST" != "$OLD" ]; then
     ln -s "$DEST" "$OLD"
 fi
 
