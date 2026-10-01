@@ -12,6 +12,13 @@
 # What persists on the box: only known_hosts fingerprints (public, not secret).
 # Nothing credential-related is ever written anywhere.
 #
+# Durable for the whole session: keepalives notice a dead link within about a minute, and a
+# small keeper process re-opens the connection when it drops (network blip, server reboot,
+# idle timeout) — it holds the password in its own memory only (no file, no environment, no
+# argv), feeds it through the same one-shot FIFO, and gives up only if the password stops
+# working. `rssh` waits for the reconnect instead of failing. The keeper dies with the
+# session.
+#
 # Why a FIFO and not an environment variable: `ssh -f` forks the background master that
 # lives for the whole session, and it inherits ssh's environment. A password exported for
 # the ask-pass helper would sit in /proc/<master>/environ, readable by anything running as
@@ -22,17 +29,21 @@
 
 set -uo pipefail
 
-VERSION="1.1.0"
+VERSION="1.2.0"
 PROG="${0##*/}"
 
 # ---- config (override via env) --------------------------------------------
 CC_CMD="${CCSSH_CC_CMD:-}"        # claude binary; auto-detected if empty
 CONNECT_TIMEOUT="${CCSSH_CONNECT_TIMEOUT:-15}"
 MAX_PW_ATTEMPTS="${CCSSH_MAX_PW_ATTEMPTS:-3}"
+KEEPALIVE="${CCSSH_KEEPALIVE:-15}"            # ServerAliveInterval seconds (x4 = dead after ~1 min)
+CHECK_EVERY="${CCSSH_CHECK_EVERY:-10}"        # keeper: seconds between connection checks
+RSSH_WAIT="${CCSSH_RSSH_WAIT:-120}"           # rssh: seconds to wait for a reconnect
 
 # ---- state (cleaned up on exit) -------------------------------------------
 tmpdir=""
 socket=""
+keeper=""
 host="" user="" port="22" password=""
 cli_host="" cli_user="" cli_port=""
 dry_run=0
@@ -65,10 +76,15 @@ Environment:
   CCSSH_CC_CMD            Path/name of the Claude Code CLI (default: claude, then cc)
   CCSSH_CONNECT_TIMEOUT   ssh ConnectTimeout seconds (default 15)
   CCSSH_MAX_PW_ATTEMPTS   Password retries before giving up (default 3)
+  CCSSH_KEEPALIVE         ServerAliveInterval seconds (default 15)
+  CCSSH_CHECK_EVERY       Seconds between reconnect checks (default 10)
+  CCSSH_RSSH_WAIT         Seconds rssh waits for a reconnect (default 120)
 
 The password is read hidden, handed to ssh's SSH_ASKPASS helper through a one-shot
 FIFO, and wiped once the connection is up. It never touches disk, never appears in
-the process list and is never left in any process's environment.
+the process list and is never left in any process's environment. If the connection
+drops during the session it is re-opened automatically (the password is kept in the
+keeper process's memory only, for exactly as long as the session lasts).
 EOF
 }
 
@@ -86,8 +102,15 @@ normalize_host() {
 }
 
 cleanup() {
-  # Close the master connection first, then remove ephemeral files.
-  if [ -n "$socket" ] && [ -S "$socket" ]; then
+  # Stop the keeper first (it holds the only copy of the password, and must not reconnect
+  # what we are about to close), then close the master, then remove ephemeral files.
+  if [ -n "$keeper" ]; then
+    kill "$keeper" 2>/dev/null; wait "$keeper" 2>/dev/null
+    keeper=""
+  fi
+  # unconditional: a socket file can be gone while the master still runs (the keeper
+  # removes a dead one before re-opening); -O exit on nothing is harmless
+  if [ -n "$socket" ]; then
     ssh -S "$socket" -O exit -p "$port" "$user@$host" >/dev/null 2>&1 || true
   fi
   [ -n "$tmpdir" ] && rm -rf "$tmpdir"
@@ -164,6 +187,9 @@ ssh_master_opts() {
     -o ControlPersist=yes \
     -o StrictHostKeyChecking=accept-new \
     -o ConnectTimeout="$CONNECT_TIMEOUT" \
+    -o ServerAliveInterval="$KEEPALIVE" \
+    -o ServerAliveCountMax=4 \
+    -o TCPKeepAlive=yes \
     -o NumberOfPasswordPrompts=1 \
     -o PreferredAuthentications=password,keyboard-interactive \
     -o PubkeyAuthentication=no
@@ -193,11 +219,64 @@ open_master() {
   return $rc
 }
 
+master_alive() {
+  ssh -S "$socket" -O check -p "$port" "$user@$host" >/dev/null 2>&1
+}
+
+keeper_loop() {
+  # Runs in the background for the whole session with its own copy of the password (a
+  # subshell variable — no file, no environment, no argv). Checks the master every
+  # CHECK_EVERY seconds and re-opens it when it is gone; backs off 5 s → 60 s while the
+  # server is unreachable; stops (and says so in $tmpdir/state) if the password is refused.
+  trap - EXIT INT TERM
+  local delay=5 rc
+  echo up > "$tmpdir/state"
+  while :; do
+    sleep "$CHECK_EVERY"
+    master_alive && { delay=5; continue; }
+    echo reconnecting > "$tmpdir/state"
+    # close the old master in case it is merely unresponsive (ControlPersist would otherwise
+    # keep an orphan alive next to the new one), then clear its socket
+    ssh -S "$socket" -O exit -p "$port" "$user@$host" >/dev/null 2>&1 || true
+    rm -f "$socket"
+    if open_master; then
+      echo up > "$tmpdir/state"
+      printf '%s reconnected\n' "$(date '+%F %T')" >> "$tmpdir/keeper.log"
+      delay=5
+      continue
+    fi
+    rc=$?
+    if grep -qiE 'permission denied|authentication failed' "$tmpdir/ssherr"; then
+      echo auth-failed > "$tmpdir/state"
+      printf '%s password refused on reconnect — giving up\n' "$(date '+%F %T')" >> "$tmpdir/keeper.log"
+      password=""
+      return 0
+    fi
+    printf '%s reconnect failed (ssh %s), retrying in %ss\n' "$(date '+%F %T')" "$rc" "$delay" >> "$tmpdir/keeper.log"
+    sleep "$delay"
+    [ "$delay" -lt 60 ] && delay=$((delay * 2))
+  done
+}
+
 build_rssh() {
   # The wrapper Claude Code uses to reach the server. Holds host/user/socket —
-  # NO password. BatchMode=yes so a dead socket fails fast instead of prompting.
+  # NO password. BatchMode=yes so a dead socket fails fast instead of prompting; when the
+  # master is down it waits (up to RSSH_WAIT s) for the keeper to bring it back.
   cat > "$tmpdir/rssh" <<EOF
 #!/usr/bin/env bash
+alive() { ssh -S "$socket" -O check -p "$port" "$user@$host" >/dev/null 2>&1; }
+if ! alive; then
+  echo "rssh: connection to $host dropped — waiting for ccssh to reconnect (up to ${RSSH_WAIT}s)…" >&2
+  waited=0
+  until alive; do
+    if [ "\$(cat "$tmpdir/state" 2>/dev/null)" = auth-failed ]; then
+      echo "rssh: the server refused the password on reconnect — exit and run ccssh again" >&2; exit 255
+    fi
+    [ "\$waited" -ge "$RSSH_WAIT" ] && { echo "rssh: still not reconnected after ${RSSH_WAIT}s" >&2; exit 255; }
+    sleep 3; waited=\$((waited + 3))
+  done
+  echo "rssh: reconnected." >&2
+fi
 exec ssh -S "$socket" -o ControlMaster=no -o BatchMode=yes -p "$port" "$user@$host" "\$@"
 EOF
   chmod 700 "$tmpdir/rssh"
@@ -212,6 +291,9 @@ To run ANY command on that server, use the \`rssh\` wrapper on your PATH, e.g.:
     rssh 'systemctl status nginx'
 
 Connection: user "$user" on host "$host" (port $port).
+
+If the connection drops (network blip, server reboot) it is re-opened automatically;
+rssh waits for it and says so — just re-run the command.
 
 You do NOT have the server's password and it is not stored anywhere on this
 machine — do not try to find, read, or reconstruct it. When the user asks you
@@ -320,11 +402,18 @@ while true; do
   fi
 done
 
-password=""   # no longer needed; the socket is authenticated
-
 log "  ✔ connected."
 build_rssh
 export PATH="$tmpdir:$PATH"
+
+if [ "$test_connection" -eq 1 ]; then
+  password=""   # a one-shot test never reconnects
+else
+  # the keeper takes its own copy of the password; this shell drops its copy now
+  keeper_loop &
+  keeper=$!
+  password=""
+fi
 
 if [ "$test_connection" -eq 1 ]; then
   log "  Running connection test (Claude Code will NOT launch)…"

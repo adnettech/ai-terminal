@@ -151,9 +151,12 @@ ccssh --test-connection                 # prove the login works, then tear down
 Paste the password once from your password manager. `ccssh` opens an SSH ControlMaster
 connection, hands the password to ssh through a one-shot FIFO (never on disk, never in the
 process list, never left in any process's environment), wipes it, and launches Claude Code
-with the server reachable through `rssh '<command>'`. When Claude Code exits the connection
-closes and every ephemeral file is gone; only `known_hosts` fingerprints remain. Needs
-OpenSSH ≥ 8.4.
+with the server reachable through `rssh '<command>'`. **Durable for the whole session:**
+keepalives notice a dead link within about a minute and a keeper re-opens it automatically
+(network blip, server reboot, idle timeout) — `rssh` waits for the reconnect instead of
+failing; the keeper holds the password in its own memory only and dies with the session.
+When Claude Code exits the connection closes and every ephemeral file is gone; only
+`known_hosts` fingerprints remain. Needs OpenSSH ≥ 8.4.
 
 ## Extras
 

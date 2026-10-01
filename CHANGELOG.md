@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-01 — `ccssh` stays connected for the whole session (v2026.10.01-6)
+
+Keepalives (`ServerAliveInterval` 15 s × 4) notice a dead link; a keeper process re-opens the
+ControlMaster when it drops — network blip, server reboot, idle timeout — feeding the password
+through the same one-shot FIFO from its own memory (no file, no environment, no argv), backing
+off 5 → 60 s while the server is unreachable, and giving up only if the password is refused.
+`rssh` waits (up to `CCSSH_RSSH_WAIT`, default 120 s) and says so, instead of failing. The
+keeper is killed first on exit. `tests/ccssh-test.sh` adds a full session whose connection
+drops between two commands.
+
 ## 2026-10-01 — `ccssh`: Claude Code on a remote server, password never stored (v2026.10.01-5)
 
 New `tools/ccssh.sh`, installed as `~/.local/bin/ccssh` by `10-claude-code` (verify checks it).
