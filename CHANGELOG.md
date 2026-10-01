@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-01 — `ccssh`: Claude Code on a remote server, password never stored (v2026.10.01-5)
+
+New `tools/ccssh.sh`, installed as `~/.local/bin/ccssh` by `10-claude-code` (verify checks it).
+Paste host/user/password once; Claude Code gets the server through `rssh`. The password reaches
+ssh's ask-pass helper through a one-shot FIFO — the earlier in-house version exported it to the
+helper's environment, and the backgrounded ControlMaster (`ssh -f`) kept it in
+`/proc/<pid>/environ` for the whole session, readable by anything running as the user.
+`tests/ccssh-test.sh` (fake ssh, no network) proves delivery, the clean master environment,
+retry and give-up; CI runs it.
+
 ## 2026-10-01 — verify: Switcher's enabled state read from settings, not the live shell (v2026.10.01-4)
 
 `gnome-extensions list --enabled` asks the running shell; with nobody logged in (a headless or

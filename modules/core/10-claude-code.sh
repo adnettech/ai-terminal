@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# ct-desc: Claude Code (official native installer) + cc/phonecc aliases + context-fill statusline
+# ct-desc: Claude Code (official native installer) + cc/phonecc aliases + context-fill statusline + ccssh
 
 if ! have claude; then
     log "installing Claude Code (native installer)"
@@ -28,6 +28,13 @@ if "statusLine" not in cfg:  # never clobber a user's own statusline
                          "command": str(pathlib.Path.home() / ".local/bin/cc-statusline")}
     p.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
+
+# ccssh: Claude Code wired to a remote server for one session — paste host/user/password
+# once; the password reaches ssh through a one-shot FIFO and is never stored, never in a
+# process's environment; Claude reaches the box through `rssh`. Refreshed on every run.
+if ! cmp -s "$SCRIPT_DIR/tools/ccssh.sh" "$HOME/.local/bin/ccssh"; then
+    install -m 0755 "$SCRIPT_DIR/tools/ccssh.sh" "$HOME/.local/bin/ccssh" || fail "could not install ccssh"
+fi
 
 # `cc` = Claude Code with permission prompts off — the point of the box. A platform
 # that ships this kit inside a larger release may supply a workspace launcher as

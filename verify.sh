@@ -111,6 +111,12 @@ if is_dcv_terminal; then
     fi
 fi
 
+if [ -x "$HOME/.local/bin/ccssh" ] && cmp -s "$SCRIPT_DIR/tools/ccssh.sh" "$HOME/.local/bin/ccssh"; then
+    p "ccssh installed (Claude Code on a remote server, password never stored)"
+else
+    f "ccssh missing or stale in ~/.local/bin (10-claude-code installs it — re-run ./bootstrap.sh)"
+fi
+
 if [ -x "$HOME/.local/bin/cct-finish" ] && grep -q 'claude-terminal postlogin-finish' "$HOME/.bashrc" 2>/dev/null; then
     p "cct-finish + post-login hook installed"
 else

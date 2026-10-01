@@ -113,7 +113,7 @@ immediately:
 | 02-home-dirs | creates the `~/Projects` workspace folder |
 | 03-updates-policy | never offers a release upgrade (no "Ubuntu 26.04 Upgrade Available" dialog); ordinary updates apply unattended, no automatic reboot, no Software Updater window — the only prompt left is "restart required" |
 | 05-node | Node.js 20 (NodeSource) + user-owned npm prefix `~/.npm-global` |
-| 10-claude-code | Claude Code native install, `cc` / `phonecc` aliases, and `cc-statusline` (live context-fill readout in every session) |
+| 10-claude-code | Claude Code native install, `cc` / `phonecc` aliases, `cc-statusline` (live context-fill readout in every session), and **`ccssh`** — Claude Code wired to a remote server for one session (below) |
 | 15-bun | Bun runtime (claude-mem's worker needs it) |
 | 20-claude-mem | [claude-mem](https://github.com/thedotmack/claude-mem) persistent memory (plugin, latest release) |
 | 25-superpowers | [superpowers](https://github.com/obra/superpowers) skills plugin |
@@ -139,6 +139,21 @@ alias phonecc='tmux new-session -A -s claude claude --dangerously-skip-permissio
 In the same spirit the core sets up **passwordless sudo** for the installing
 user (`01-sudo-nopasswd`) — a deliberate posture for a single-user workstation
 VM. If you fork this and don't want it, delete that module.
+
+### `ccssh` — Claude Code on a remote server, without storing the password
+
+```bash
+ccssh                                   # prompts: host (a URL is fine), user, port, password
+ccssh --host srv.example.com --user admin
+ccssh --test-connection                 # prove the login works, then tear down
+```
+
+Paste the password once from your password manager. `ccssh` opens an SSH ControlMaster
+connection, hands the password to ssh through a one-shot FIFO (never on disk, never in the
+process list, never left in any process's environment), wipes it, and launches Claude Code
+with the server reachable through `rssh '<command>'`. When Claude Code exits the connection
+closes and every ephemeral file is gone; only `known_hosts` fingerprints remain. Needs
+OpenSSH ≥ 8.4.
 
 ## Extras
 

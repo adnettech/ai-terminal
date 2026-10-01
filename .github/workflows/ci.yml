@@ -13,3 +13,5 @@ jobs:
           shellcheck -x $(git ls-files '*.sh')
       - name: smoke
         run: bash tests/smoke.sh
+      - name: ccssh (fake ssh, no network)
+        run: bash tests/ccssh-test.sh
