@@ -3,8 +3,8 @@
 os-audit*/
 *.tar.gz
 
-# Maintainer's local agent context.
-CLAUDE.md
+# Local, uncommitted agent notes
+CLAUDE.local.md
 
 # Editor / OS noise
 *.swp
