@@ -161,8 +161,13 @@ if [ -d "$SW" ]; then
     # the shell has not loaded yet reports INITIALIZED, and that is precisely the state
     # 46-switcher leaves behind -- it tells you to reload the shell rather than doing it to
     # a live desktop. Checking State therefore FAILed every freshly-provisioned box.
-    if gnome-extensions list --enabled 2>/dev/null | grep -qx 'switcher@landau.fi'; then
-        if gnome-extensions info switcher@landau.fi 2>/dev/null | grep -qiE 'state: *ENABLED'; then
+    # The enabled list lives in the settings database, which reads without a session bus;
+    # `gnome-extensions list` asks the running shell, so on a box nobody is logged into (a
+    # headless check, an SSM run) it returned nothing and FAILed a correctly-enabled box.
+    if gsettings get org.gnome.shell enabled-extensions 2>/dev/null | grep -q "'switcher@landau.fi'"; then
+        if ! pgrep -u "$(id -u)" -x gnome-shell >/dev/null 2>&1; then
+            p "switcher extension enabled (no desktop session right now — loads at the next login)"
+        elif gnome-extensions info switcher@landau.fi 2>/dev/null | grep -qiE 'state: *ENABLED'; then
             p "switcher extension enabled"
         else
             s "switcher enabled but not loaded yet — reload the shell or log out/in"

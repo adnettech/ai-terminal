@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-01 — verify: Switcher's enabled state read from settings, not the live shell (v2026.10.01-4)
+
+`gnome-extensions list --enabled` asks the running shell; with nobody logged in (a headless or
+SSM run) it returned nothing and FAILed a correctly-enabled box. `verify.sh` now reads
+`org.gnome.shell enabled-extensions` (a settings read, no bus) and asks the shell for the
+runtime state only when one is running. Reported by both the on-prem fleet and an AWS terminal.
+
 ## 2026-10-01 — apt waits for the package lock (v2026.10.01-3)
 
 `apt_update_once` / `apt_install` pass `-o DPkg::Lock::Timeout=600`. A box booting after weeks
