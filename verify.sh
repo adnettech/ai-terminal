@@ -190,8 +190,10 @@ if [ -d "$SW" ]; then
     fi
     if systemctl --user is-active switcher-patches.path >/dev/null 2>&1; then
         p "switcher-patches.path watching for extension updates"
+    elif [ -L "$HOME/.config/systemd/user/default.target.wants/switcher-patches.path" ]; then
+        p "switcher-patches.path enabled (starts with the user session — not running in this shell)"
     else
-        f "switcher-patches.path inactive — an extension update will silently revert the patches"
+        f "switcher-patches.path not enabled — an extension update will silently revert the patches (re-run ./bootstrap.sh)"
     fi
 else
     s "switcher not installed (46-switcher skipped: no GNOME, or no build for this shell)"

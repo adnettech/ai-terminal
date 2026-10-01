@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-01 — Switcher's re-patch watcher is enabled on headless provisions (v2026.10.01-2)
+
+`46-switcher` enabled `switcher-patches.path` with `systemctl --user enable --now … || true`.
+During a headless provision the user has no systemd manager yet, so the enable failed
+silently and the watcher never existed — the first extension update then reverted the three
+patches for good. The module now writes the `default.target.wants` link itself (what `enable`
+writes) and only *starts* the unit when a user manager is running; `verify.sh` accepts the
+link as enabled when the unit isn't running in the current shell. Reported from the adNET
+on-prem fleet (present on existing desktops too).
+
 ## 2026-10-01 — Ai Terminal: the public kit, on its own (v2026.10.01)
 
 `claude-terminal` split in two. This repo is the public half — the Ubuntu 24.04

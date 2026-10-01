@@ -62,8 +62,16 @@ PathChanged=$EXT/modes/switcher.js
 [Install]
 WantedBy=default.target
 UNIT
-systemctl --user daemon-reload >/dev/null 2>&1 || true
-systemctl --user enable --now switcher-patches.path >/dev/null 2>&1 || true
+# Enable = the default.target.wants link, made directly: during headless provisioning the
+# user has no systemd manager yet, `systemctl --user enable` fails (silently, behind the
+# `|| true`) and the watcher would never exist. The link is exactly what enable writes; a
+# running manager additionally starts it now, otherwise it starts at the first login.
+install -d "$HOME/.config/systemd/user/default.target.wants"
+ln -sfn "$HOME/.config/systemd/user/switcher-patches.path" \
+    "$HOME/.config/systemd/user/default.target.wants/switcher-patches.path"
+if systemctl --user daemon-reload >/dev/null 2>&1; then
+    systemctl --user start switcher-patches.path >/dev/null 2>&1 || true
+fi
 
 # Settings. The extension keeps its schema in its own dir, so --schemadir is required.
 # gui_conf, never a bare gsettings: with no user bus a `gsettings set` exits 0 and writes
