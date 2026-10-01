@@ -42,15 +42,20 @@ require_ubuntu_2404() {
 }
 
 # ---- apt ----------------------------------------------------------------------
+# Wait for the dpkg/apt locks instead of failing on them: a box that boots after weeks off
+# runs unattended-upgrades first, and an install that hits its lock used to FAIL the module
+# (seen on a fleet terminal waking after a month). 10 minutes covers a large catch-up.
+APT_LOCK_WAIT=(-o DPkg::Lock::Timeout=600)
+
 apt_update_once() {
     [ -e "$CT_TMP/apt-updated" ] && return 0
     log "apt-get update..."
-    sudo apt-get update -qq && touch "$CT_TMP/apt-updated"
+    sudo apt-get "${APT_LOCK_WAIT[@]}" update -qq && touch "$CT_TMP/apt-updated"
 }
 
 apt_install() {
     apt_update_once
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
+    sudo DEBIAN_FRONTEND=noninteractive apt-get "${APT_LOCK_WAIT[@]}" install -y "$@"
 }
 
 pkg_installed() { dpkg-query -W -f '${Status}' "$1" 2>/dev/null | grep -q "install ok installed"; }

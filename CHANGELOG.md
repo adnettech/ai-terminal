@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-01 — apt waits for the package lock (v2026.10.01-3)
+
+`apt_update_once` / `apt_install` pass `-o DPkg::Lock::Timeout=600`. A box booting after weeks
+off runs unattended-upgrades first; a module installing a package then hit the dpkg lock and
+FAILED instead of waiting (seen on a fleet terminal waking after a month).
+
 ## 2026-10-01 — Switcher's re-patch watcher is enabled on headless provisions (v2026.10.01-2)
 
 `46-switcher` enabled `switcher-patches.path` with `systemctl --user enable --now … || true`.
