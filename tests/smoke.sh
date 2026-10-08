@@ -29,6 +29,14 @@ printf '# shellcheck shell=bash\n# ct-desc: a layer module\nok "layer"\n' > "$T/
 "$T/kit/bootstrap.sh" --list | grep -q '08-layer-test .*a layer module' && ok "layer module sorts into --list" || bad "layer module missing from --list"
 grep -q 'verify.d' verify.sh && ok "verify.sh has the verify.d hook" || bad "verify.d hook missing"
 
+# Windows: ccinstall.ps1 runs under Windows PowerShell 5.1 via -File (cc.cmd's -Finish), which
+# reads a BOM-less file as ANSI — any non-ASCII byte becomes mojibake, so keep it ASCII.
+LC_ALL=C grep -q '[^ -~[:space:]]' windows/ccinstall.ps1 && bad "windows/ccinstall.ps1 has non-ASCII bytes" || ok "ccinstall.ps1 is ASCII"
+if command -v node >/dev/null; then
+    node --check windows/cc-statusline.js && echo '{"model":{"display_name":"M"},"context_window":{"used_percentage":42}}' \
+        | node windows/cc-statusline.js | grep -qx 'M · context 42%' && ok "cc-statusline.js" || bad "cc-statusline.js"
+fi
+
 # get.sh refuses on a managed box (simulated: AIT test hook not needed — read the guard)
 grep -q '/etc/asp-terminal.env' get.sh && grep -q 'AIT_ALLOW_MANAGED' get.sh && ok "get.sh fleet guard present" || bad "get.sh fleet guard missing"
 

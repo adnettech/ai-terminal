@@ -26,7 +26,7 @@ tag** and layers its own files on top (see *Layers*).
 | `assets/` | data files modules load |
 | `tools/` | standalone helpers installed to `~/.local/bin` by modules (`cct-finish`, `cc-statusline`, `render-page`, …) |
 | `verify.sh` | read-only PASS/FAIL/SKIP state check; sources `verify.d/*.sh` if a layer supplies any |
-| `windows/` | runs on a Windows host, not on the box: Hyper-V VM builder + `cctemp` |
+| `windows/` | runs on Windows, not on the box: Hyper-V VM builder, `cctemp` (temporary install), `ccinstall` (permanent install, the Windows twin of the Claude Code modules; keep it ASCII and 5.1-compatible) |
 | `audit/system-audit.sh` | full machine snapshot for diffing two boxes |
 
 ## Module contract

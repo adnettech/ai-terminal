@@ -83,6 +83,49 @@ The launcher downloads to `$env:TEMP` and invokes the script as a file, which
 keeps its `#Requires -RunAsAdministrator` guard working. It enables TLS 1.2 and
 sets a **process-scoped** execution-policy bypass — nothing persists.
 
+## Windows: permanent install (`ccinstall`)
+
+For a Windows PC that should *keep* Claude Code, set up the way the Ubuntu
+kit sets up a workstation. From a normal PowerShell, **signed in as the person
+who will use it** (not an RMM/SYSTEM session, which it refuses):
+
+```powershell
+irm https://raw.githubusercontent.com/adnettech/ai-terminal/main/windows/ccinstall.ps1 | iex
+```
+
+[`windows/ccinstall.ps1`](windows/ccinstall.ps1) is user-profile-scoped and
+idempotent. Re-running it is how you pick up kit updates, and Claude Code
+updates itself. winget may raise a UAC prompt for Git and Node. The script
+offers to open Claude Code for sign-in. If you skip that, the first `cc` after
+you sign in installs the plugins.
+
+| Ubuntu core | On Windows |
+|---|---|
+| 00-base-cli, 05-node, 15-bun, 30-uv | Git for Windows (required: Claude Code's Bash tool uses it), gh, jq, Node.js LTS, Bun, uv, all via winget (official installers for Bun/uv when winget is missing) |
+| 10-claude-code | official native installer; `%USERPROFILE%\.local\bin` on the user PATH; **`cc` = `claude --dangerously-skip-permissions`** as a `cc.cmd` shim, so it works in PowerShell, cmd and Windows Terminal without touching execution policy |
+| context-fill statusline | `cc-statusline.js` (Node port: PowerShell 5.1 is too slow to start on every redraw, and its output isn't UTF-8), wired into `~\.claude\settings.json` unless you already have a statusLine |
+| 20-claude-mem, 25-superpowers | same plugins, same marketplaces |
+| 27-postlogin-finish | `cc.cmd` finishes the plugin installs on the first launch after sign-in |
+| 02-home-dirs | `%USERPROFILE%\Projects` |
+| 42-terminal-prefs | a **Claude Code** Windows Terminal profile (a fragment, so your WT settings stay untouched), plus Start-menu and desktop shortcuts that open `cc` in `Projects` |
+| not ported | passwordless sudo, update policy, the GNOME desktop modules, `phonecc` (tmux), `ccssh` (Windows OpenSSH has no ControlMaster), `render-page` |
+
+**On a box that already has `cctemp`:** `ccinstall` converts the install to
+permanent. It removes the 30-day auto-cleanup task and the temporary marker,
+and keeps the binary, your sign-in and your history.
+It leaves its own marker, `%LOCALAPPDATA%\ai-terminal\installed.json`,
+recording when and by whom the install was made.
+
+```powershell
+# read-only PASS/FAIL report (like verify.sh)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/adnettech/ai-terminal/main/windows/ccinstall.ps1))) -Verify
+# remove what ccinstall added (cc, statusline, profile, shortcuts); Claude Code stays.
+# cctemp.ps1 -Cleanup purges Claude Code itself.
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/adnettech/ai-terminal/main/windows/ccinstall.ps1))) -Uninstall
+```
+
+Other switches: `-NoSignIn` (unattended), `-NoShortcuts`, `-Ref <tag>`.
+
 ## Windows: temporary troubleshooting install (`cctemp`)
 
 Not a workstation build: [`windows/cctemp.ps1`](windows/cctemp.ps1) puts

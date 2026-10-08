@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-08 — Windows: permanent install (`ccinstall`)
+
+New `windows/ccinstall.ps1`, the deliberate counterpart of `cctemp`. It sets up Claude Code on
+Windows the way the Ubuntu core sets up a workstation: Git/gh/jq/Node/Bun/uv via winget, the
+native installer, `cc` = `claude --dangerously-skip-permissions` (a `cc.cmd` shim, no profile or
+execution-policy change), the context-fill statusline ported to Node (`windows/cc-statusline.js`),
+the claude-mem and superpowers plugins (the first `cc` after sign-in finishes them, like
+`27-postlogin-finish`), `%USERPROFILE%\Projects`, a Windows Terminal profile fragment and
+shortcuts. Idempotent, with `-Verify` and `-Uninstall` modes. It refuses to run as SYSTEM, and it
+converts a `cctemp` box by removing its 30-day dead-man task so that task can never purge a
+permanent install. `tests/smoke.sh` keeps the script ASCII-only (Windows PowerShell 5.1 reads a
+BOM-less `-File` script as ANSI) and runs the statusline port.
+
 ## 2026-10-01 — `ccssh` stays connected for the whole session (v2026.10.01-6)
 
 Keepalives (`ServerAliveInterval` 15 s × 4) notice a dead link; a keeper process re-opens the
