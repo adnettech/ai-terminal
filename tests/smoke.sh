@@ -35,6 +35,11 @@ LC_ALL=C grep -q '[^ -~[:space:]]' windows/ccinstall.ps1 && bad "windows/ccinsta
 if command -v node >/dev/null; then
     node --check windows/cc-statusline.js && echo '{"model":{"display_name":"M"},"context_window":{"used_percentage":42}}' \
         | node windows/cc-statusline.js | grep -qx 'M · context 42%' && ok "cc-statusline.js" || bad "cc-statusline.js"
+    # the Windows cc menu, driven through its numbered fallback (no console) with a dry run
+    LH=$(mktemp -d); mkdir -p "$LH/Projects/alpha"
+    printf '1\n' | HOME="$LH" CC_LAUNCHER_DRYRUN=1 node windows/cc-launcher.js 2>&1 \
+        | grep -q "DRYRUN cwd=$LH/Projects/alpha :: .*--dangerously-skip-permissions" && ok "cc-launcher.js" || bad "cc-launcher.js"
+    rm -rf "$LH"
 fi
 
 # get.sh refuses on a managed box (simulated: AIT test hook not needed — read the guard)

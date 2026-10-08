@@ -9,11 +9,27 @@
 // Same logic as the bash version: trust the window and used_percentage Claude Code reports for
 // the running model (never hardcode a window), fall back to the latest turn's usage in the
 // transcript. Tunables (env): CC_CONTEXT_WINDOW (override), CC_CTX_NUDGE (default 80).
-// The model-window cache the bash version writes is for a platform launcher that has no
-// Windows counterpart, so it is left out here.
+// Like the bash version it also teaches the launcher (cc-launcher.js) each model's window:
+// transcripts record the model and usage but no window, so the launcher can't know it alone.
 'use strict';
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+
+const WIN_CACHE = path.join(os.homedir(), '.local', 'state', 'cc-launcher', 'model-windows.json');
+
+function rememberWindow(model, win) {
+    if (!model || !win) return;
+    try {
+        let known = {};
+        try { known = JSON.parse(fs.readFileSync(WIN_CACHE, 'utf8')); } catch { /* first one */ }
+        if (known[model] === win) return;                 // only write on change
+        known[model] = win;
+        fs.mkdirSync(path.dirname(WIN_CACHE), { recursive: true });
+        fs.writeFileSync(WIN_CACHE + '.new', JSON.stringify(known));
+        fs.renameSync(WIN_CACHE + '.new', WIN_CACHE);
+    } catch { /* a cache miss is not worth a broken statusline */ }
+}
 
 function lastUsage(tp) {
     if (!tp) return null;
@@ -41,6 +57,7 @@ function render(d) {
     const cwd = path.basename((d.workspace || {}).current_dir || '');
     const cw = d.context_window || {};
     const seg = [cwd, model].filter(Boolean);
+    rememberWindow((d.model || {}).id, cw.context_window_size);
 
     const envWin = process.env.CC_CONTEXT_WINDOW;
     const win = envWin ? parseInt(envWin, 10) : (cw.context_window_size || 200000);

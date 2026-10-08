@@ -102,13 +102,22 @@ you sign in installs the plugins.
 | Ubuntu core | On Windows |
 |---|---|
 | 00-base-cli, 05-node, 15-bun, 30-uv | Git for Windows (required: Claude Code's Bash tool uses it), gh, jq, Node.js LTS, Bun, uv, all via winget (official installers for Bun/uv when winget is missing) |
-| 10-claude-code | official native installer; `%USERPROFILE%\.local\bin` on the user PATH; **`cc` = `claude --dangerously-skip-permissions`** as a `cc.cmd` shim, so it works in PowerShell, cmd and Windows Terminal without touching execution policy |
+| 10-claude-code | official native installer; `%USERPROFILE%\.local\bin` on the user PATH; **`cc`** opens the workspace menu (below), then `claude --dangerously-skip-permissions` in the chosen folder. It's a `cc.cmd` shim, so it works in PowerShell, cmd and Windows Terminal without touching execution policy |
 | context-fill statusline | `cc-statusline.js` (Node port: PowerShell 5.1 is too slow to start on every redraw, and its output isn't UTF-8), wired into `~\.claude\settings.json` unless you already have a statusLine |
 | 20-claude-mem, 25-superpowers | same plugins, same marketplaces |
-| 27-postlogin-finish | `cc.cmd` finishes the plugin installs on the first launch after sign-in |
+| 27-postlogin-finish | `cc` finishes the plugin installs on the first launch after sign-in |
 | 02-home-dirs | `%USERPROFILE%\Projects` |
-| 42-terminal-prefs | a **Claude Code** Windows Terminal profile (a fragment, so your WT settings stay untouched), plus Start-menu and desktop shortcuts that open `cc` in `Projects` |
+| 42-terminal-prefs | a **Claude Code** Windows Terminal profile (a fragment, so your WT settings stay untouched), plus Start-menu and desktop shortcuts with the Claude Code mascot icon that open the `cc` menu |
 | not ported | passwordless sudo, update policy, the GNOME desktop modules, `phonecc` (tmux), `ccssh` (Windows OpenSSH has no ControlMaster), `render-page` |
+
+**The `cc` menu** ([`windows/cc-launcher.js`](windows/cc-launcher.js)) lists
+the folders under `Projects` plus `os-changes` (this machine) and `misc` (small
+research). "↩ Pick up where you left off" shows your recent sessions as cards
+(what each was about, how many exchanges, how full its context is), and each
+folder offers continue / new / pick an earlier session. When a session's
+context runs red, "⚑ Wrap up & hand off" has Claude write `HANDOFF.md`, and the
+next visit offers "⇥ New session from hand-off". Arrow keys + Enter, Esc back,
+`?` help. `cc <folder>` skips the menu. A short tour runs on the first `cc`.
 
 **On a box that already has `cctemp`:** `ccinstall` converts the install to
 permanent. It removes the 30-day auto-cleanup task and the temporary marker,

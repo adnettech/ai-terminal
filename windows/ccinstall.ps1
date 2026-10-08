@@ -14,9 +14,12 @@
         15-bun, 30-uv). Git for Windows is required: Claude Code uses its Bash.
       - Claude Code from the official native installer (10-claude-code), with
         %USERPROFILE%\.local\bin on the user PATH.
-      - `cc` = claude --dangerously-skip-permissions, as a cc.cmd shim so it
-        works in PowerShell, cmd and Windows Terminal alike, no profile or
-        execution-policy change needed.
+      - `cc` = the workspace launcher (cc-launcher.js): a menu over
+        %USERPROFILE%\Projects with recent-session recall, continue / new /
+        hand-off / wrap-up, misc and os-changes - then claude
+        --dangerously-skip-permissions in the chosen folder. A cc.cmd shim, so
+        it works in PowerShell, cmd and Windows Terminal alike, no profile or
+        execution-policy change needed. `cc <folder>` skips the menu.
       - The context-fill statusline (cc-statusline.js), wired into
         ~\.claude\settings.json unless you already have a statusLine.
       - claude-mem and superpowers plugins (20-claude-mem, 25-superpowers).
@@ -24,7 +27,8 @@
         if you skip that, the first `cc` after sign-in finishes them
         (27-postlogin-finish does the same from .bashrc on Ubuntu).
       - %USERPROFILE%\Projects (02-home-dirs), plus a "Claude Code" Windows
-        Terminal profile and Start-menu/desktop shortcuts that open `cc` there.
+        Terminal profile and Start-menu/desktop shortcuts (Claude Code mascot
+        icon) that open the `cc` menu.
 
     Idempotent: re-running is safe and is how you pick up kit updates.
     Claude Code itself auto-updates.
@@ -94,8 +98,9 @@ $Marker    = Join-Path $StateDir 'installed.json'
 $LocalCopy = Join-Path $StateDir 'ccinstall.ps1'
 $Settings  = Join-Path $UserHome '.claude\settings.json'
 $PluginDir = Join-Path $UserHome '.claude\plugins\cache'
-$RawBase   = "https://raw.githubusercontent.com/adnettech/ai-terminal/$Ref/windows"
-$SelfUrl   = "$RawBase/ccinstall.ps1"
+$RawRoot   = "https://raw.githubusercontent.com/adnettech/ai-terminal/$Ref"
+$SelfUrl   = "$RawRoot/windows/ccinstall.ps1"
+$Icon      = Join-Path $StateDir 'claude-code.ico'
 $WtFragDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\ai-terminal'
 $WtGuid    = '{c8e929d4-dc38-4e14-bf0e-fb42593945a8}'
 $LinkName  = 'Claude Code.lnk'
@@ -135,12 +140,15 @@ function Write-Utf8NoBom($Path, $Text) {
     [IO.File]::WriteAllText($Path, $Text, (New-Object Text.UTF8Encoding $false))
 }
 
-function Get-KitFile($Name, $Dest) {
-    # From the checkout when run as a file, else from GitHub (irm | iex).
-    if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot $Name))) {
-        if ((Join-Path $PSScriptRoot $Name) -ne $Dest) { Copy-Item (Join-Path $PSScriptRoot $Name) $Dest -Force }
+function Get-KitFile($RepoPath, $Dest) {
+    # $RepoPath is relative to the repo root. From the checkout when run as a file
+    # (windows\ccinstall.ps1), else from GitHub (irm | iex).
+    $local = if ($PSScriptRoot) { Join-Path (Split-Path $PSScriptRoot) $RepoPath } else { $null }
+    New-Item -ItemType Directory -Path (Split-Path $Dest) -Force | Out-Null
+    if ($local -and (Test-Path $local)) {
+        if ($local -ne $Dest) { Copy-Item $local $Dest -Force }
     } else {
-        Invoke-WebRequest -Uri "$RawBase/$Name" -OutFile $Dest -UseBasicParsing
+        Invoke-WebRequest -Uri "$RawRoot/$RepoPath" -OutFile $Dest -UseBasicParsing
     }
 }
 
@@ -265,8 +273,14 @@ function Remove-CCTempSwitch {
 function Write-Shim {
     $shim = @'
 @echo off
-rem ai-terminal: cc = Claude Code with permission prompts off. Written by windows/ccinstall.ps1;
-rem re-running ccinstall rewrites it. The first cc after sign-in finishes the plugin installs.
+rem ai-terminal: cc = the workspace menu, then Claude Code with permission prompts off.
+rem Written by windows/ccinstall.ps1; re-running ccinstall rewrites it. The menu (Node) also
+rem finishes the plugin installs on the first launch after sign-in; without Node, this does.
+where node >nul 2>nul || goto plain
+if not exist "%~dp0cc-launcher.js" goto plain
+node "%~dp0cc-launcher.js" %*
+goto :eof
+:plain
 if not exist "%USERPROFILE%\.claude\.credentials.json" goto run
 if not exist "%USERPROFILE%\.claude\plugins\cache\thedotmack\" goto finish
 if not exist "%USERPROFILE%\.claude\plugins\cache\superpowers-marketplace\" goto finish
@@ -284,10 +298,18 @@ claude --dangerously-skip-permissions %*
 '@
     New-Item -ItemType Directory -Path $Bin -Force | Out-Null
     [IO.File]::WriteAllText((Join-Path $Bin 'cc.cmd'), ($shim -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
-    Ok 'cc -> claude --dangerously-skip-permissions (cc.cmd)'
+    Ok 'cc -> workspace menu -> claude --dangerously-skip-permissions (cc.cmd)'
 }
 
 function Get-CcCommandLine {
+    # Shortcuts and the terminal profile run the menu straight from PowerShell, not through
+    # cc.cmd: Ctrl+C inside Claude Code would otherwise leave cmd asking "Terminate batch
+    # job (Y/N)?" when the session ends. -NoExit leaves a shell in the folder afterwards.
+    $launcher = Join-Path $Bin 'cc-launcher.js'
+    if ((Have node) -and (Test-Path $launcher)) {
+        $l = $launcher -replace "'", "''"
+        return "powershell.exe -NoLogo -NoExit -Command `"& node '$l'`""
+    }
     $cc = (Join-Path $Bin 'cc.cmd') -replace "'", "''"
     "powershell.exe -NoLogo -NoExit -Command `"& '$cc'`""
 }
@@ -299,6 +321,7 @@ function Write-Launchers {
         name              = 'Claude Code'
         commandline       = (Get-CcCommandLine)
         startingDirectory = $Projects
+        icon              = $Icon
     }) } | ConvertTo-Json -Depth 5
     Write-Utf8NoBom (Join-Path $WtFragDir 'claude-code.json') $frag
     Ok 'Windows Terminal profile "Claude Code"'
@@ -317,6 +340,7 @@ function Write-Launchers {
         }
         $lnk.WorkingDirectory = $Projects
         $lnk.Description = 'Claude Code (cc)'
+        if (Test-Path $Icon) { $lnk.IconLocation = "$Icon,0" }
         $lnk.Save()
     }
     Ok 'Start-menu and desktop shortcuts "Claude Code"'
@@ -343,6 +367,8 @@ function Invoke-Verify {
     $raw = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')
     if (($raw -split ';') -contains $Bin) { P "user PATH has $Bin" } else { F "user PATH lacks $Bin" }
     if (Test-Path (Join-Path $Bin 'cc.cmd')) { P 'cc shim' } else { F 'cc shim missing' }
+    if (Test-Path (Join-Path $Bin 'cc-launcher.js')) { P 'cc workspace menu' } else { F 'cc-launcher.js missing' }
+    if (Test-Path $Icon) { P 'Claude Code icon' } else { F 'icon missing' }
     if (Test-Path $Projects) { P "$Projects" } else { F "$Projects missing" }
     if ((Test-Path $Settings) -and ((Get-Content $Settings -Raw) -match 'cc-statusline')) { P 'statusline wired' }
     elseif ((Test-Path $Settings) -and ((Get-Content $Settings -Raw) -match '"statusLine"')) { S 'statusLine is your own (left alone)' }
@@ -360,13 +386,13 @@ function Invoke-Verify {
 
 function Invoke-Uninstall {
     Say 'removing what ccinstall added (Claude Code, your sign-in and history stay)'
-    foreach ($f in @((Join-Path $Bin 'cc.cmd'), (Join-Path $Bin 'cc-statusline.js'), $StartLink, $DeskLink, $WtFragDir)) {
+    foreach ($f in @((Join-Path $Bin 'cc.cmd'), (Join-Path $Bin 'cc-statusline.js'), (Join-Path $Bin 'cc-launcher.js'), $StartLink, $DeskLink, $WtFragDir)) {
         if (Test-Path $f) { Remove-Item $f -Recurse -Force; Write-Host "  removed $f" }
     }
     if ((Have node) -and (Set-StatusLine remove) -eq 'written') { Write-Host '  removed statusLine from settings.json' }
     if (Test-Path $StateDir) { Remove-Item $StateDir -Recurse -Force; Write-Host "  removed $StateDir" }
     Say 'done. To purge Claude Code itself (binary, ~\.claude, sign-in):'
-    Write-Host "  & ([scriptblock]::Create((irm $($RawBase)/cctemp.ps1))) -Cleanup"
+    Write-Host "  & ([scriptblock]::Create((irm $($RawRoot)/windows/cctemp.ps1))) -Cleanup"
 }
 
 function Invoke-Install {
@@ -414,7 +440,7 @@ function Invoke-Install {
 
     if (Have node) {
         try {
-            Get-KitFile 'cc-statusline.js' (Join-Path $Bin 'cc-statusline.js')
+            Get-KitFile 'windows/cc-statusline.js' (Join-Path $Bin 'cc-statusline.js')
             switch (Set-StatusLine add) {
                 'written'    { Ok 'statusline wired into settings.json' }
                 'ours'       { Ok 'statusline already wired' }
@@ -423,6 +449,13 @@ function Invoke-Install {
             }
         } catch { Bad "statusline: $($_.Exception.Message)" }
     } else { Skip 'statusline needs Node.js' }
+
+    try {
+        Get-KitFile 'windows/cc-launcher.js' (Join-Path $Bin 'cc-launcher.js')
+        if (Have node) { Ok 'cc workspace menu (cc-launcher.js)' } else { Skip 'cc workspace menu needs Node.js - cc opens plain Claude Code until then' }
+    } catch { Bad "cc-launcher.js: $($_.Exception.Message)" }
+    try { Get-KitFile 'assets/windows/claude-code.ico' $Icon; Ok 'Claude Code icon' }
+    catch { Skip "icon not fetched ($($_.Exception.Message)) - shortcuts keep the default icon" }
 
     Write-Launchers
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-08 — Windows: the `cc` workspace menu and the Claude Code icon
+
+`cc` on Windows opens a workspace menu (`windows/cc-launcher.js`, Node), the generic half of
+the fleet launcher: folders under `Projects`, `os-changes`, `misc`, "Pick up where you left off"
+session cards with context fill, continue / new / hand-off / wrap-up, new project, a first-run
+tour and `?` help. `cc <folder>` skips it. The statusline caches each model's context window
+again so the cards can show context fill. Shortcuts and the Windows Terminal profile carry
+the Claude Code mascot (`assets/windows/claude-code.ico`, rendered from Claude Code's own
+startup banner by `make-claude-code-ico.py`) and run the menu straight from PowerShell, so a
+Ctrl+C in a session never leaves cmd asking "Terminate batch job?". Re-run `ccinstall` to
+pick it up.
+
 ## 2026-10-08 — Windows: permanent install (`ccinstall`)
 
 New `windows/ccinstall.ps1`, the deliberate counterpart of `cctemp`. It sets up Claude Code on
