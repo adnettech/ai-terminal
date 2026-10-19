@@ -9,5 +9,5 @@ client features live in a private platform that consumes this kit by tag.
 - Rules: no secrets or identifiers anywhere (code, comments, fixtures, commits, issues) —
   `acme` / `example.com` placeholders; idempotent modules; degrade to SKIP, never block;
   names already written on boxes (`claude-terminal …` markers/paths) keep their spelling.
-- Test: `bash tests/smoke.sh`, `bash tests/ccssh-test.sh`, `shellcheck -x $(git ls-files '*.sh')`.
+- Test: `bash tests/smoke.sh`, `bash tests/ccssh-test.sh`, `bash tests/auto-update-test.sh`, `shellcheck -x $(git ls-files '*.sh')`.
 - Release: tag `vYYYY.MM.DD[-n]` on main once validated; `get.sh` installs the newest tag.

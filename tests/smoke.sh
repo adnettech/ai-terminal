@@ -13,7 +13,7 @@ ok "every *.sh parses"
 
 ./bootstrap.sh --help | grep -q -- '--with-<extra>' && ok "--help" || bad "--help"
 L=$(./bootstrap.sh --list)
-for m in 00-base-cli 10-claude-code 27-postlogin-finish docker xrdp; do
+for m in 00-base-cli 04-auto-update 10-claude-code 27-postlogin-finish docker xrdp; do
     printf '%s' "$L" | grep -q "$m" || bad "--list misses $m"
 done
 ok "--list"

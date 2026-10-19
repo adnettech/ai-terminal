@@ -439,6 +439,39 @@ else
     fi
 fi
 
+# ---- 04-auto-update ----------------------------------------------------------
+# Offline too: the timer's enabled-state is a symlink, the last outcome a stamp file.
+AU_CONF="$HOME/.config/ai-terminal"; AU_LAST="$HOME/.local/state/ai-terminal/update-last"
+AU_WANT="$HOME/.config/systemd/user/timers.target.wants/ai-terminal-update.timer"
+if is_dcv_terminal; then
+    s "auto-update — a fleet platform's updater owns this box"
+elif [ ! -d "$SCRIPT_DIR/.git" ]; then
+    s "auto-update — not a git checkout, nothing to follow"
+elif [ -e "$AU_CONF/no-auto-update" ]; then
+    s "auto-update opted out ($AU_CONF/no-auto-update) — re-run get.sh by hand to update"
+elif [ ! -x "$HOME/.local/bin/ait-update" ] || [ ! -e "$AU_WANT" ]; then
+    f "auto-update timer not installed or not enabled (04-auto-update — re-run ./bootstrap.sh)"
+else
+    AU_RES=$(sed -n 's/^result=//p' "$AU_LAST" 2>/dev/null); AU_TO=$(sed -n 's/^to=//p' "$AU_LAST" 2>/dev/null)
+    AU_AT=$(sed -n 's/^at=//p' "$AU_LAST" 2>/dev/null); AU_WHY=$(sed -n 's/^reason=//p' "$AU_LAST" 2>/dev/null)
+    AU_N=$(sed -n 's/^deferred_count=//p' "$AU_LAST" 2>/dev/null)
+    AU_LIVE=""
+    if ensure_user_dbus 2>/dev/null && ! systemctl --user is-active --quiet ai-terminal-update.timer 2>/dev/null; then
+        AU_LIVE=" — but the timer is not running now: systemctl --user start ai-terminal-update.timer"
+    fi
+    case "$AU_RES" in
+        applied|current) p "auto-update on (every ~2 h): $AU_RES $AU_TO at $AU_AT$AU_LIVE" ;;
+        deferred) if [ "${AU_N:-0}" -ge 36 ]; then
+                      f "auto-update to $AU_TO deferred $AU_N times (~3 days): $AU_WHY — the box is never free; run: ait-update --now"
+                  else
+                      s "auto-update to $AU_TO waiting for a free moment ($AU_WHY; $AU_N tick(s) so far)$AU_LIVE"
+                  fi ;;
+        failed)   f "last auto-update failed: $AU_WHY" ;;
+        skipped)  s "auto-update last skipped: $AU_WHY" ;;
+        *)        p "auto-update timer enabled (every ~2 h); no run yet$AU_LIVE" ;;
+    esac
+fi
+
 # ---- layers ------------------------------------------------------------------
 # A platform that ships this kit inside a larger release adds its own checks as
 # verify.d/*.sh — sourced here in name order, with p/f/s and every lib helper in

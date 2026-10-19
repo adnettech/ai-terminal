@@ -58,6 +58,11 @@ else
 fi
 
 REF="${AIT_REF:-}"
+# The auto-updater (04-auto-update, ait-update) follows the same choice from now on:
+# AIT_REF given → recorded (main = track main, a tag = stay pinned there);
+# not given → newest release tag, and any earlier pin is cleared.
+mkdir -p "$HOME/.config/ai-terminal"
+if [ -n "$REF" ]; then printf '%s\n' "$REF" > "$HOME/.config/ai-terminal/ref"; else rm -f "$HOME/.config/ai-terminal/ref"; fi
 if [ -z "$REF" ]; then
     REF="$(git -C "$DEST" tag --list 'v*' --sort=-creatordate | head -1)"
     [ -n "$REF" ] || REF=main

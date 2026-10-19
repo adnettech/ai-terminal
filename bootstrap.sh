@@ -73,6 +73,16 @@ done
 require_not_root
 require_ubuntu_2404
 
+# Remember every extra this box has opted into (the union over runs): the auto-updater
+# (04-auto-update) re-runs bootstrap with them, so an opt-in product keeps getting its
+# updates too. Drop a line from ~/.config/ai-terminal/extras to stop maintaining one.
+if [ ${#EXTRAS[@]} -gt 0 ]; then
+    mkdir -p "$HOME/.config/ai-terminal"
+    { cat "$HOME/.config/ai-terminal/extras" 2>/dev/null; printf '%s\n' "${EXTRAS[@]}"; } \
+        | grep -v '^[[:space:]]*$' | sort -u > "$HOME/.config/ai-terminal/extras.tmp" \
+        && mv -f "$HOME/.config/ai-terminal/extras.tmp" "$HOME/.config/ai-terminal/extras"
+fi
+
 # Tools installed earlier in this same run must resolve immediately.
 export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.bun/bin:$PATH"
 

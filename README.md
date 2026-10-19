@@ -49,9 +49,11 @@ Then:
 3. `./verify.sh` to confirm everything, and read the printed **NEXT STEPS**.
 
 Extras are flags: `curl -fsSL https://get.adnet.tools | bash -s -- --with-docker --with-xrdp`
-(see `./bootstrap.sh --list` for everything). Updating = running the one-liner
-again. `AIT_REF=main` tracks development instead of releases; `AIT_REF=<tag>`
-pins one.
+(see `./bootstrap.sh --list` for everything). Updates come by themselves: a user
+timer checks every ~2 h and applies a new release once nobody is working on the box
+(04-auto-update); running the one-liner again is the same thing, now. `AIT_REF=main`
+tracks development instead of releases; `AIT_REF=<tag>` pins one — the timer follows
+whichever you chose last.
 
 **Coming from `claude-terminal`?** Run the one-liner. Your old
 `~/claude-terminal` checkout is kept as `~/claude-terminal.pre-ai-terminal`
@@ -164,6 +166,7 @@ immediately:
 | 01-sudo-nopasswd | passwordless sudo for the installing user — password asked once at first setup, never again |
 | 02-home-dirs | creates the `~/Projects` workspace folder |
 | 03-updates-policy | never offers a release upgrade (no "Ubuntu 26.04 Upgrade Available" dialog); ordinary updates apply unattended, no automatic reboot, no Software Updater window — the only prompt left is "restart required" |
+| 04-auto-update | the kit keeps itself current: a user timer (`ai-terminal-update.timer`, every ~2 h) applies a new release when nobody is working on the box — no `claude` running, no unlocked desktop session — re-running bootstrap with the extras the box opted into. `ait-update --check` shows the state, `--now` applies at once; opt out with `touch ~/.config/ai-terminal/no-auto-update`. Not on fleet terminals (their platform ships the kit) |
 | 05-node | Node.js 20 (NodeSource) + user-owned npm prefix `~/.npm-global` |
 | 10-claude-code | Claude Code native install, `cc` / `phonecc` aliases, `cc-statusline` (live context-fill readout in every session), and **`ccssh`** — Claude Code wired to a remote server for one session (below) |
 | 15-bun | Bun runtime (claude-mem's worker needs it) |

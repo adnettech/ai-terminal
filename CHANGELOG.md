@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-19 — the kit updates itself (04-auto-update, `ait-update`)
+
+Claude Code updates itself; the kit around it only moved when someone remembered the
+one-liner, so plain boxes drifted (2026-10: the client gained idle compaction and no public-kit
+box could follow without a hand). New core module **04-auto-update** installs
+`tools/ait-update.sh` as `~/.local/bin/ait-update` and a user timer
+(`ai-terminal-update.timer`, every ~2 h, persistent) that fetches the release tags and applies
+a newer one Windows-Update-style — only when the box is free: no `claude` process for the user,
+no active unlocked desktop session, no local changes in the checkout, and passwordless sudo in
+place (else it defers and the timer retries). It re-runs `bootstrap.sh` with the extras the box
+opted into: `bootstrap.sh` now records the union of every `--with-<extra>` in
+`~/.config/ai-terminal/extras`. `get.sh` records `AIT_REF` in `~/.config/ai-terminal/ref`
+(absent = newest tag, `main` = track main, a tag = stay pinned) and the updater follows it.
+Outcome in `~/.local/state/ai-terminal/update-last`, log beside it; a failed bootstrap is
+retried on the next tick; `ait-update --check` / `--now`; opt out with
+`~/.config/ai-terminal/no-auto-update`. The timer is enabled by symlink so headless provisioning
+(no user systemd instance) still leaves it armed for the next login. Fleet terminals skip it:
+their platform ships the kit inside its release. `verify.sh` reports the timer and the last
+outcome (a deferral past ~3 days is a FAIL with the `--now` hint). `tests/auto-update-test.sh`
+(fake sudo/pgrep/loginctl, local git origin, 12 cases) runs in CI.
 ## 2026-10-08 — Windows: the `cc` workspace menu and the Claude Code icon
 
 `cc` on Windows opens a workspace menu (`windows/cc-launcher.js`, Node), the generic half of
