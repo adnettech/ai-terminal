@@ -17,3 +17,5 @@ jobs:
         run: bash tests/ccssh-test.sh
       - name: auto-update test
         run: bash tests/auto-update-test.sh
+      - name: Windows self-update test (pwsh, mocked, no network)
+        run: bash tests/ccinstall-update-test.sh

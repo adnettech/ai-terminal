@@ -30,8 +30,15 @@
         Terminal profile and Start-menu/desktop shortcuts (Claude Code mascot
         icon) that open the `cc` menu.
 
-    Idempotent: re-running is safe and is how you pick up kit updates.
-    Claude Code itself auto-updates.
+      - Self-update (04-auto-update): a per-user scheduled task,
+        ai-terminal-update, checks every 2 hours and at sign-in and applies
+        newer kit files (menu, statusline, shim, shortcuts, this script) from
+        the ref the box was installed from - only while this user has no
+        Claude Code running, else it waits for the next run. Claude Code
+        itself auto-updates.
+
+    Idempotent: re-running is safe, and repairs anything the self-update
+    cannot (missing tools, sign-in, plugins).
 
     A box that still has a temporary cctemp install is converted: the cctemp
     dead-man task and marker are removed so the 30-day idle purge can no
@@ -47,9 +54,20 @@
     Read-only PASS/FAIL/SKIP report, like verify.sh.
 .PARAMETER Finish
     Only the sign-in-gated plugin installs. Run by cc.cmd from the local copy.
+.PARAMETER Update
+    What the ai-terminal-update task runs: fetch the kit at the installed ref
+    and, if anything changed and Claude Code is not running, apply it. Logged
+    to %LOCALAPPDATA%\ai-terminal\update.log; last outcome in update-last.json.
+    Add -Now to apply even while Claude Code is running.
+.PARAMETER Refresh
+    Internal: rewrite the kit files only (no winget, no sign-in, no plugins).
+    -Update runs the NEW script with it, so new install logic applies too.
+.PARAMETER NoAutoUpdate
+    Don't register the self-update task (writes %LOCALAPPDATA%\ai-terminal\no-auto-update;
+    delete that file and re-run ccinstall to turn it back on).
 .PARAMETER Uninstall
     Remove what this script added (cc, statusline, shortcuts, terminal
-    profile, marker). Claude Code, your sign-in, history and the winget
+    profile, self-update task, marker). Claude Code, your sign-in, history and the winget
     tools stay; cctemp.ps1 -Cleanup purges Claude Code completely.
 .PARAMETER NoSignIn
     Don't offer to open Claude Code for sign-in (unattended runs).
@@ -75,7 +93,11 @@ param(
     [switch]$Verify,
     [switch]$Finish,
     [switch]$Uninstall,
+    [switch]$Update,
+    [switch]$Now,
+    [switch]$Refresh,
     [switch]$NoSignIn,
+    [switch]$NoAutoUpdate,
     [switch]$NoShortcuts,
     [string]$Ref = 'main'
 )
@@ -98,7 +120,13 @@ $Marker    = Join-Path $StateDir 'installed.json'
 $LocalCopy = Join-Path $StateDir 'ccinstall.ps1'
 $Settings  = Join-Path $UserHome '.claude\settings.json'
 $PluginDir = Join-Path $UserHome '.claude\plugins\cache'
-$RawRoot   = "https://raw.githubusercontent.com/adnettech/ai-terminal/$Ref"
+# The self-update follows the ref the box was installed from (main unless -Ref said otherwise).
+if ($Update -and -not $PSBoundParameters.ContainsKey('Ref') -and (Test-Path $Marker)) {
+    try { $r = (Get-Content $Marker -Raw | ConvertFrom-Json).ref; if ($r) { $Ref = $r } } catch { }
+}
+if ($Ref -notmatch '^[A-Za-z0-9._/-]+$') { $Ref = 'main' }
+$Repo      = 'adnettech/ai-terminal'
+$RawRoot   = "https://raw.githubusercontent.com/$Repo/$Ref"
 $SelfUrl   = "$RawRoot/windows/ccinstall.ps1"
 $Icon      = Join-Path $StateDir 'claude-code.ico'
 $WtFragDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\ai-terminal'
@@ -106,6 +134,19 @@ $WtGuid    = '{c8e929d4-dc38-4e14-bf0e-fb42593945a8}'
 $LinkName  = 'Claude Code.lnk'
 $StartLink = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$LinkName"
 $DeskLink  = Join-Path ([Environment]::GetFolderPath('Desktop')) $LinkName
+$TaskName  = 'ai-terminal-update'
+$NoUpdate  = Join-Path $StateDir 'no-auto-update'
+$UpdLog    = Join-Path $StateDir 'update.log'
+$UpdLast   = Join-Path $StateDir 'update-last.json'
+$Staging   = Join-Path $StateDir 'staging'
+# Repo file -> where it is installed. A changed ccinstall.ps1 stands for everything it
+# generates (cc.cmd, the terminal profile, the shortcuts), so these four cover the kit.
+$KitFiles  = [ordered]@{
+    'windows/ccinstall.ps1'          = $LocalCopy
+    'windows/cc-launcher.js'         = (Join-Path $Bin 'cc-launcher.js')
+    'windows/cc-statusline.js'       = (Join-Path $Bin 'cc-statusline.js')
+    'assets/windows/claude-code.ico' = $Icon
+}
 
 $script:Failed = $false
 $script:Next   = New-Object System.Collections.Generic.List[string]
@@ -330,6 +371,8 @@ function Write-Launchers {
     $wt = Get-Command wt.exe -ErrorAction SilentlyContinue
     $ws = New-Object -ComObject WScript.Shell
     foreach ($path in @($StartLink, $DeskLink)) {
+        # A self-update doesn't bring back a desktop shortcut someone deleted.
+        if ($Refresh -and $path -eq $DeskLink -and -not (Test-Path $path)) { continue }
         $lnk = $ws.CreateShortcut($path)
         if ($wt) {
             $lnk.TargetPath = $wt.Source
@@ -344,6 +387,165 @@ function Write-Launchers {
         $lnk.Save()
     }
     Ok 'Start-menu and desktop shortcuts "Claude Code"'
+}
+
+function Register-UpdateTask {
+    if (Test-Path $NoUpdate) { Unregister-UpdateTask; Skip "self-update off ($NoUpdate)"; return }
+    # conhost --headless: powershell's -WindowStyle Hidden still flashes a window, and on
+    # Windows 11 a Windows Terminal one, every time the task runs.
+    $ps  = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $arg = "--headless `"$ps`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$LocalCopy`" -Update"
+    $me  = "$env:USERDOMAIN\$env:USERNAME"
+    try {
+        $action = New-ScheduledTaskAction -Execute (Join-Path $env:WINDIR 'System32\conhost.exe') -Argument $arg
+        $every  = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(15) -RepetitionInterval (New-TimeSpan -Hours 2)
+        $logon  = New-ScheduledTaskTrigger -AtLogOn -User $me
+        $logon.Delay = 'PT5M'
+        $set = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+            -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew
+        $who = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Limited
+        $desc = 'ai-terminal: keeps the Claude Code kit (cc menu, statusline, shortcuts) current. Remove with ccinstall -Uninstall.'
+        try {
+            Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger @($every, $logon) -Settings $set -Principal $who -Description $desc -Force | Out-Null
+            Ok "self-update: task $TaskName (every 2 h and at sign-in, never while Claude Code runs)"
+        } catch {
+            # some builds want admin for a logon trigger; the 2-hourly one alone still does the job
+            Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $every -Settings $set -Principal $who -Description $desc -Force | Out-Null
+            Ok "self-update: task $TaskName (every 2 h, never while Claude Code runs)"
+        }
+    } catch {
+        Skip "self-update task not registered ($($_.Exception.Message))"
+        Next 're-run ccinstall to retry the self-update task'
+    }
+}
+
+function Unregister-UpdateTask {
+    if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+        return $true
+    }
+    $false
+}
+
+function Write-UpdateResult($Result, $Detail, $Commit) {
+    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+    $msg = if ($Detail) { "$($Result): $Detail" } else { $Result }
+    Say "update $msg"
+    $log = @(if (Test-Path $UpdLog) { Get-Content $UpdLog | Select-Object -Last 199 })
+    $log += "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) [$Ref] $msg"
+    Write-Utf8NoBom $UpdLog (($log -join "`r`n") + "`r`n")
+    @{ result = $Result; detail = "$Detail"; at = (Get-Date).ToString('o'); ref = $Ref; commit = "$Commit" } |
+        ConvertTo-Json | ForEach-Object { Write-Utf8NoBom $UpdLast $_ }
+}
+
+function Get-KitCommit {
+    # Resolve the ref to one commit so the files fetched together are one snapshot
+    # (raw.githubusercontent.com at a branch name can straddle a push). Falls back to the ref.
+    try {
+        $r = Invoke-WebRequest -Uri "https://api.github.com/repos/$Repo/commits/$Ref" -UseBasicParsing -TimeoutSec 30 `
+            -Headers @{ Accept = 'application/vnd.github.sha' }
+        $c = $r.Content
+        if ($c -is [byte[]]) { $c = [Text.Encoding]::ASCII.GetString($c) }
+        if ("$c".Trim() -match '^[0-9a-f]{40}$') { return "$c".Trim() }
+    } catch { }
+    $null
+}
+
+function Test-ClaudeBusy {
+    # This user's Claude Code, or the cc menu about to start it. Not just any claude.exe: the
+    # Claude desktop app is one too. Another user's processes show no path or command line.
+    # Busy matters because cmd.exe re-reads cc.cmd while running it, so rewriting it then breaks that window.
+    foreach ($p in @(Get-CimInstance Win32_Process -Filter "Name='claude.exe' OR Name='node.exe'" -ErrorAction SilentlyContinue)) {
+        $exe = "$($p.ExecutablePath)"; $cmd = "$($p.CommandLine)"
+        if ($p.Name -eq 'claude.exe' -and $exe.StartsWith((Join-Path $UserHome '.local\'), 'OrdinalIgnoreCase')) { return $true }
+        if ($p.Name -eq 'node.exe' -and $cmd -match 'cc-launcher|claude-code' -and $cmd.IndexOf($UserHome, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    }
+    $false
+}
+
+function Get-Sha256($Path) { if (Test-Path $Path) { (Get-FileHash $Path -Algorithm SHA256).Hash } }
+
+function Invoke-SelfUpdate {
+    if (Test-Path $NoUpdate) { Write-UpdateResult 'skipped' "self-update is off ($NoUpdate)"; return }
+    try {
+        [Net.ServicePointManager]::SecurityProtocol =
+            [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    } catch { }
+    $ProgressPreference = 'SilentlyContinue'
+    $commit = Get-KitCommit
+    $root = "https://raw.githubusercontent.com/$Repo/$(if ($commit) { $commit } else { $Ref })"
+    # Staged in the repo's layout, so the new ccinstall.ps1 finds its kit files beside it.
+    if (Test-Path $Staging) { Remove-Item $Staging -Recurse -Force }
+    try {
+        foreach ($f in $KitFiles.Keys) {
+            $dest = Join-Path $Staging $f
+            New-Item -ItemType Directory -Path (Split-Path $dest) -Force | Out-Null
+            Invoke-WebRequest -Uri "$root/$f" -OutFile $dest -UseBasicParsing -TimeoutSec 60
+        }
+    } catch {
+        Write-UpdateResult 'failed' "download: $($_.Exception.Message)" $commit
+        return
+    }
+    # A file this box never installed (the statusline without Node) is not an update.
+    $changed = @($KitFiles.Keys | Where-Object { ($_ -eq 'windows/ccinstall.ps1' -or (Test-Path $KitFiles[$_])) -and
+        (Get-Sha256 (Join-Path $Staging $_)) -ne (Get-Sha256 $KitFiles[$_]) })
+    if (-not $changed.Count) {
+        Remove-Item $Staging -Recurse -Force -ErrorAction SilentlyContinue
+        Write-UpdateResult 'current' '' $commit
+        return
+    }
+    if (-not $Now -and (Test-ClaudeBusy)) {
+        Write-UpdateResult 'deferred' "Claude Code is running - next try in 2 h ($($changed -join ', ') changed)" $commit
+        return
+    }
+    $new = Join-Path $Staging 'windows\ccinstall.ps1'
+    $r = Invoke-Quiet { powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $new -Refresh -Ref $Ref }
+    Remove-Item $Staging -Recurse -Force -ErrorAction SilentlyContinue
+    if ($r.Code -eq 0) { Write-UpdateResult 'applied' ($changed -join ', ') $commit }
+    else { Write-UpdateResult 'failed' ("refresh: " + (($r.Out.Trim() -split "`n" | Select-Object -Last 2) -join ' ')) $commit }
+}
+
+function Save-LocalCopy {
+    # Local copy: cc.cmd runs -Finish from it, and the self-update task runs -Update from it.
+    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+    if ($PSCommandPath -and $PSCommandPath -ne $LocalCopy) { Copy-Item $PSCommandPath $LocalCopy -Force }
+    elseif (-not $PSCommandPath) { Invoke-WebRequest -Uri $SelfUrl -OutFile $LocalCopy -UseBasicParsing }
+}
+
+function Install-KitFiles {
+    if (Have node) {
+        try {
+            Get-KitFile 'windows/cc-statusline.js' (Join-Path $Bin 'cc-statusline.js')
+            switch (Set-StatusLine add) {
+                'written'    { Ok 'statusline wired into settings.json' }
+                'ours'       { Ok 'statusline already wired' }
+                'theirs'     { Skip 'statusLine already set to your own - left alone' }
+                default      { Bad 'settings.json is not valid JSON - statusline not wired'; Next "fix $Settings, then re-run ccinstall" }
+            }
+        } catch { Bad "statusline: $($_.Exception.Message)" }
+    } else { Skip 'statusline needs Node.js' }
+
+    try {
+        Get-KitFile 'windows/cc-launcher.js' (Join-Path $Bin 'cc-launcher.js')
+        if (Have node) { Ok 'cc workspace menu (cc-launcher.js)' } else { Skip 'cc workspace menu needs Node.js - cc opens plain Claude Code until then' }
+    } catch { Bad "cc-launcher.js: $($_.Exception.Message)" }
+    try { Get-KitFile 'assets/windows/claude-code.ico' $Icon; Ok 'Claude Code icon' }
+    catch { Skip "icon not fetched ($($_.Exception.Message)) - shortcuts keep the default icon" }
+}
+
+function Write-Marker {
+    $first = $null
+    if (Test-Path $Marker) { try { $first = Get-Content $Marker -Raw | ConvertFrom-Json } catch { } }
+    @{
+        installed_at = if ($first -and $first.installed_at) { $first.installed_at } else { (Get-Date).ToString('o') }
+        installed_by = if ($first -and $first.installed_by) { $first.installed_by } else { "$env:USERDOMAIN\$env:USERNAME" }
+        updated_at   = (Get-Date).ToString('o')
+        host         = $env:COMPUTERNAME
+        purpose      = 'PERMANENT Claude Code install (ccinstall, ai-terminal repo)'
+        ref          = $Ref
+        update       = "irm $SelfUrl | iex"
+        uninstall    = "& ([scriptblock]::Create((irm $SelfUrl))) -Uninstall"
+    } | ConvertTo-Json | ForEach-Object { Write-Utf8NoBom $Marker $_ }
 }
 
 function Show-Next {
@@ -373,7 +575,22 @@ function Invoke-Verify {
     if ((Test-Path $Settings) -and ((Get-Content $Settings -Raw) -match 'cc-statusline')) { P 'statusline wired' }
     elseif ((Test-Path $Settings) -and ((Get-Content $Settings -Raw) -match '"statusLine"')) { S 'statusLine is your own (left alone)' }
     else { F 'statusline not wired' }
-    if (Test-Path (Join-Path $WtFragDir 'claude-code.json')) { P 'Windows Terminal profile' } else { F 'Windows Terminal profile missing' }
+    $frag = Join-Path $WtFragDir 'claude-code.json'
+    if (-not (Test-Path $frag)) { F 'Windows Terminal profile missing' }
+    elseif ((Get-Content $frag -Raw) -match 'cc-launcher') { P 'Windows Terminal profile opens the cc menu' }
+    else { F 'Windows Terminal profile starts Claude Code without the menu (old install) - re-run ccinstall' }
+    if (Test-Path $StartLink) { P 'Start-menu shortcut' } else { F 'Start-menu shortcut missing' }
+    if (Test-Path $DeskLink) { P 'desktop shortcut' } else { S 'no desktop shortcut' }
+    if (Test-Path $NoUpdate) { S "self-update off ($NoUpdate)" }
+    elseif (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { P "self-update task $TaskName" }
+    else { F "self-update task $TaskName missing - re-run ccinstall" }
+    if (Test-Path $UpdLast) {
+        try {
+            $u = Get-Content $UpdLast -Raw | ConvertFrom-Json
+            $line = "last self-update check: $($u.result) $($u.at)$(if ($u.detail) { " - $($u.detail)" })"
+            if ($u.result -eq 'failed') { S $line } else { P $line }
+        } catch { S 'update-last.json unreadable' }
+    } elseif (-not (Test-Path $NoUpdate)) { S 'self-update has not run yet' }
     if (Test-SignedIn) {
         P 'signed in'
         $pl = (Invoke-Quiet { claude plugin list }).Out
@@ -386,6 +603,7 @@ function Invoke-Verify {
 
 function Invoke-Uninstall {
     Say 'removing what ccinstall added (Claude Code, your sign-in and history stay)'
+    if (Unregister-UpdateTask) { Write-Host "  removed scheduled task $TaskName" }
     foreach ($f in @((Join-Path $Bin 'cc.cmd'), (Join-Path $Bin 'cc-statusline.js'), (Join-Path $Bin 'cc-launcher.js'), $StartLink, $DeskLink, $WtFragDir)) {
         if (Test-Path $f) { Remove-Item $f -Recurse -Force; Write-Host "  removed $f" }
     }
@@ -432,32 +650,12 @@ function Invoke-Install {
     New-Item -ItemType Directory -Path $Projects -Force | Out-Null
     Ok "$Projects"
 
-    # Local copy: cc.cmd runs -Finish from it, offline and without re-fetching code.
-    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
-    if ($PSCommandPath -and $PSCommandPath -ne $LocalCopy) { Copy-Item $PSCommandPath $LocalCopy -Force }
-    elseif (-not $PSCommandPath) { Invoke-WebRequest -Uri $SelfUrl -OutFile $LocalCopy -UseBasicParsing }
+    Save-LocalCopy
     Write-Shim
-
-    if (Have node) {
-        try {
-            Get-KitFile 'windows/cc-statusline.js' (Join-Path $Bin 'cc-statusline.js')
-            switch (Set-StatusLine add) {
-                'written'    { Ok 'statusline wired into settings.json' }
-                'ours'       { Ok 'statusline already wired' }
-                'theirs'     { Skip 'statusLine already set to your own - left alone' }
-                default      { Bad 'settings.json is not valid JSON - statusline not wired'; Next "fix $Settings, then re-run ccinstall" }
-            }
-        } catch { Bad "statusline: $($_.Exception.Message)" }
-    } else { Skip 'statusline needs Node.js' }
-
-    try {
-        Get-KitFile 'windows/cc-launcher.js' (Join-Path $Bin 'cc-launcher.js')
-        if (Have node) { Ok 'cc workspace menu (cc-launcher.js)' } else { Skip 'cc workspace menu needs Node.js - cc opens plain Claude Code until then' }
-    } catch { Bad "cc-launcher.js: $($_.Exception.Message)" }
-    try { Get-KitFile 'assets/windows/claude-code.ico' $Icon; Ok 'Claude Code icon' }
-    catch { Skip "icon not fetched ($($_.Exception.Message)) - shortcuts keep the default icon" }
-
+    Install-KitFiles
     Write-Launchers
+    if ($NoAutoUpdate) { New-Item -ItemType File -Path $NoUpdate -Force | Out-Null }
+    Register-UpdateTask
 
     if (-not (Test-SignedIn) -and (Have claude) -and -not $NoSignIn) {
         try {
@@ -466,16 +664,7 @@ function Invoke-Install {
         } catch { }   # non-interactive host: the cc shim finishes later
     }
     Install-Plugins
-
-    @{
-        installed_at = (Get-Date).ToString('o')
-        installed_by = "$env:USERDOMAIN\$env:USERNAME"
-        host         = $env:COMPUTERNAME
-        purpose      = 'PERMANENT Claude Code install (ccinstall, ai-terminal repo)'
-        ref          = $Ref
-        update       = "irm $SelfUrl | iex"
-        uninstall    = "& ([scriptblock]::Create((irm $SelfUrl))) -Uninstall"
-    } | ConvertTo-Json | ForEach-Object { Write-Utf8NoBom $Marker $_ }
+    Write-Marker
 
     Show-Next
     Write-Host ''
@@ -483,9 +672,25 @@ function Invoke-Install {
     Write-Host '  Open a NEW terminal (PATH changed), or the "Claude Code" profile/shortcut, and run:  cc' -ForegroundColor Green
 }
 
+function Invoke-Refresh {
+    # Run by -Update from the freshly fetched script: the kit files only, nothing that
+    # needs a person (winget UAC, sign-in) or the network beyond what -Update staged.
+    Say "refreshing the kit files from $Ref"
+    Update-SessionPath
+    Save-LocalCopy
+    Write-Shim
+    Install-KitFiles
+    Write-Launchers
+    Register-UpdateTask
+    Write-Marker
+    if ($script:Failed) { exit 1 }
+}
+
 # ---- entry -------------------------------------------------------------------
 
 if ($Verify)        { Invoke-Verify }
 elseif ($Uninstall) { Invoke-Uninstall }
 elseif ($Finish)    { Update-SessionPath; Say 'finishing plugin setup'; Install-Plugins; Show-Next }
+elseif ($Update)    { Invoke-SelfUpdate }
+elseif ($Refresh)   { Invoke-Refresh }
 else                { Invoke-Install }

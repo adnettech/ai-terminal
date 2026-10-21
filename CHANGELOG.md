@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-21 — Windows: `ccinstall` keeps itself current
+
+A Windows box only got kit changes when someone re-ran `ccinstall`, so one installed before the
+`cc` menu (2026-10-08) still dropped straight into Claude Code. `ccinstall` now registers a
+per-user scheduled task, **`ai-terminal-update`** (every 2 h and at sign-in, no admin, run through
+`conhost --headless` so no window flashes). It runs the local copy with `-Update`, which resolves
+the installed ref (`installed.json`'s `ref`, `main` by default) to one commit, stages
+`ccinstall.ps1`, `cc-launcher.js`, `cc-statusline.js` and the icon, and compares them with what
+is installed. If anything changed and this user has no Claude Code (or `cc` menu) running, it runs
+the **new** script with `-Refresh`: kit files, `cc.cmd`, terminal profile, shortcuts, task and
+marker, with no winget, sign-in or plugins. Otherwise it defers to the next run. The Claude desktop
+app's `claude.exe` doesn't count as busy. A refresh leaves out a desktop shortcut that was
+deleted. Outcome in `%LOCALAPPDATA%\ai-terminal\update-last.json`, log in `update.log`; `-Update -Now`
+applies while busy; `-NoAutoUpdate` opts out. `-Verify` now also fails a terminal profile that
+skips the menu (an old install), and reports the shortcuts, the task and the last update.
+`-Uninstall` removes the task. `tests/ccinstall-update-test.sh` (pwsh, GitHub and processes
+mocked) runs in CI.
+
 ## 2026-10-19 — the kit updates itself (04-auto-update, `ait-update`)
 
 Claude Code updates itself; the kit around it only moved when someone remembered the

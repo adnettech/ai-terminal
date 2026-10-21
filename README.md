@@ -96,8 +96,8 @@ irm https://raw.githubusercontent.com/adnettech/ai-terminal/main/windows/ccinsta
 ```
 
 [`windows/ccinstall.ps1`](windows/ccinstall.ps1) is user-profile-scoped and
-idempotent. Re-running it is how you pick up kit updates, and Claude Code
-updates itself. winget may raise a UAC prompt for Git and Node. The script
+idempotent. After that the box keeps itself current (self-update, below), and
+Claude Code updates itself. winget may raise a UAC prompt for Git and Node. The script
 offers to open Claude Code for sign-in. If you skip that, the first `cc` after
 you sign in installs the plugins.
 
@@ -110,6 +110,7 @@ you sign in installs the plugins.
 | 27-postlogin-finish | `cc` finishes the plugin installs on the first launch after sign-in |
 | 02-home-dirs | `%USERPROFILE%\Projects` |
 | 42-terminal-prefs | a **Claude Code** Windows Terminal profile (a fragment, so your WT settings stay untouched), plus Start-menu and desktop shortcuts with the Claude Code mascot icon that open the `cc` menu |
+| 04-auto-update | a per-user scheduled task, `ai-terminal-update`, every 2 h and at sign-in: fetches the kit at the ref the box was installed from (`main` by default) and, if anything changed, applies it, but only while this user has no Claude Code running (`cc` menu included); otherwise it retries later. No admin rights, no window |
 | not ported | passwordless sudo, update policy, the GNOME desktop modules, `phonecc` (tmux), `ccssh` (Windows OpenSSH has no ControlMaster), `render-page` |
 
 **The `cc` menu** ([`windows/cc-launcher.js`](windows/cc-launcher.js)) lists
@@ -135,7 +136,22 @@ recording when and by whom the install was made.
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/adnettech/ai-terminal/main/windows/ccinstall.ps1))) -Uninstall
 ```
 
-Other switches: `-NoSignIn` (unattended), `-NoShortcuts`, `-Ref <tag>`.
+**Self-update.** The task runs the local copy of the script
+(`%LOCALAPPDATA%\ai-terminal\ccinstall.ps1 -Update`). It refreshes the menu,
+statusline, `cc.cmd`, terminal profile, shortcuts and the script itself. It never
+runs winget or touches sign-in. Re-running `ccinstall` by hand still repairs those.
+Each run is logged to `%LOCALAPPDATA%\ai-terminal\update.log`, and `-Verify`
+reports the last outcome. A box installed before self-update existed (before
+2026-10-21) needs one more run of the install one-liner to get the task.
+
+```powershell
+# check and apply now, even with Claude Code open
+& "$env:LOCALAPPDATA\ai-terminal\ccinstall.ps1" -Update -Now
+```
+
+Other switches: `-NoSignIn` (unattended), `-NoShortcuts`, `-NoAutoUpdate`
+(no task; delete `%LOCALAPPDATA%\ai-terminal\no-auto-update` and re-run to turn
+it back on), `-Ref <tag>` (the self-update then stays on that tag).
 
 ## Windows: temporary troubleshooting install (`cctemp`)
 
