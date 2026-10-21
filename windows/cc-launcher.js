@@ -12,8 +12,9 @@
 //   misc         small research & everything else (one subfolder per topic)
 //
 // Session recall & hygiene:
-//   - "↩ Pick up where you left off": recent sessions across every workspace (last
-//     CC_RECALL_DAYS days, default 5) as cards: gist, exchanges, duration, context fill.
+//   - "↩ Pick up where you left off": recent sessions wherever they ran (last
+//     CC_RECALL_DAYS days, default 5, else the newest few of any age) as cards: gist,
+//     exchanges, duration, context fill.
 //   - context >= CC_CTX_FULL (85) shows red as FULL and steers to "⚑ Wrap up & hand off",
 //     which resumes the session with a prompt that has Claude write HANDOFF.md; the next
 //     visit to that folder offers "⇥ New session from hand-off".
@@ -417,22 +418,65 @@ const subdirs = (d) => {
 const ALL_DIRS = subdirs(PROJECTS);
 const PROJ_DIRS = ALL_DIRS.filter((d) => !['os-changes', 'misc'].includes(path.basename(d)));
 
-// recent sessions across every workspace (+ misc subprojects), newest first, capped at 8
-function buildRecall() {
-    const cutoff = Date.now() - RECALL_DAYS * 86400000;
-    const rows = [];
-    for (const d of [...ALL_DIRS, ...subdirs(path.join(PROJECTS, 'misc'))]) {
-        for (const s of sessionFiles(d)) if (s.mtime >= cutoff) rows.push({ dir: d, file: s.file, mtime: s.mtime });
-    }
-    return rows.sort((a, b) => b.mtime - a.mtime).slice(0, 8);
+// The folder a transcript ran in: every entry records its cwd, so the first one near the top
+// says. Read from the file, not the session folder's name, which can't be turned back into a
+// path ('-' stands for every non-alphanumeric character).
+function sessCwd(file) {
+    try {
+        const fd = fs.openSync(file, 'r'), buf = Buffer.alloc(65536);
+        const n = fs.readSync(fd, buf, 0, buf.length, 0);
+        fs.closeSync(fd);
+        const m = buf.toString('utf8', 0, n).match(/"cwd":"((?:[^"\\]|\\.)*)"/);
+        return m ? JSON.parse(`"${m[1]}"`) : '';
+    } catch { return ''; }
 }
-const RECALL = buildRecall();
+const isDir = (d) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
+// how a session's folder reads in the menu: misc\topic, Projects, ~\somewhere
+function where(d) {
+    const inside = (base) => { const r = path.relative(base, d); return r.startsWith('..') || path.isAbsolute(r) ? null : r; };
+    const p = inside(PROJECTS);
+    if (p !== null) return p || 'Projects';
+    const h = inside(HOME);
+    return h === null ? d : h ? `~${path.sep}${h}` : '~';
+}
+
+// Recent sessions wherever they ran (sessions from before the menu ran in Projects itself or
+// the home folder), newest first, capped at 8: those of the last RECALL_DAYS days, or when
+// there are none, the newest of any age. Skipped: folders that are gone, and any under a
+// dot-folder: claude-mem runs its own background sessions in ~/.claude-mem.
+function buildRecall() {
+    const files = [];
+    let keys = [];
+    try { keys = fs.readdirSync(SESSIONS); } catch { /* none yet */ }
+    for (const k of keys) {
+        let names = [];
+        try { names = fs.readdirSync(path.join(SESSIONS, k)).filter((f) => f.endsWith('.jsonl')); } catch { continue; }
+        for (const f of names) {
+            const file = path.join(SESSIONS, k, f);
+            try { files.push({ key: k, file, mtime: fs.statSync(file).mtimeMs }); } catch { /* vanished */ }
+        }
+    }
+    files.sort((a, b) => b.mtime - a.mtime);
+    const cwdOf = new Map(), rows = [];   // one session folder = one cwd: read it once
+    for (const f of files) {
+        if (rows.length >= 8) break;
+        if (!cwdOf.has(f.key)) {
+            const d = sessCwd(f.file);
+            cwdOf.set(f.key, d && isDir(d) && !d.split(/[\\/]/).some((s) => s.startsWith('.')) ? d : '');
+        }
+        if (cwdOf.get(f.key)) rows.push({ dir: cwdOf.get(f.key), file: f.file, mtime: f.mtime });
+    }
+    const recent = rows.filter((r) => r.mtime >= Date.now() - RECALL_DAYS * 86400000);
+    return { rows: recent.length ? recent : rows, older: !recent.length };
+}
+const { rows: RECALL, older: RECALL_OLDER } = buildRecall();
+const RECALL_SPAN = RECALL_OLDER ? 'your last sessions' : `last ${RECALL_DAYS} days`;
 
 function mainMenu() {
     const m = [];
     if (RECALL.length) {
         m.push({ path: '@recall', name: '↩ Pick up where you left off',
-                 desc: `${RECALL.length} recent session${RECALL.length > 1 ? 's' : ''} · newest: ${path.basename(RECALL[0].dir)} · ${ageOf(RECALL[0].file)}` });
+                 desc: `${RECALL.length} ${RECALL_OLDER ? '' : 'recent '}session${RECALL.length > 1 ? 's' : ''} · newest: ${where(RECALL[0].dir)} · ${ageOf(RECALL[0].file)}` });
     }
     for (const d of PROJ_DIRS) m.push({ path: d, name: path.basename(d), desc: 'project' });
     m.push({ path: path.join(PROJECTS, 'os-changes'), name: 'os-changes', desc: 'this machine: settings & troubleshooting' });
@@ -547,10 +591,10 @@ async function main(argv) {
         if (target === '@recall') {
             const menu = RECALL.map((r) => {
                 const sm = sessMeta(r.file), c = card(sm);
-                return { path: '@pick', r, pct: sm.ctx, name: path.basename(r.dir), desc: ageOf(r.file), meta: c.meta, warn: c.warn };
+                return { path: '@pick', r, pct: sm.ctx, name: where(r.dir), desc: ageOf(r.file), meta: c.meta, warn: c.warn };
             });
             menu.push({ path: '@back', name: '← Back', desc: '' });
-            const p = await pick(menu, `recent sessions (last ${RECALL_DAYS} days) — pick one to continue`, `Recent sessions (last ${RECALL_DAYS} days):`,
+            const p = await pick(menu, `recent sessions (${RECALL_SPAN}) — pick one to continue`, `Recent sessions (${RECALL_SPAN}):`,
                 { hint: "context = how full that conversation's working memory is; a FULL one is only good for a wrap-up", help: RECALL_HELP });
             if (p.rc === 1) quit();
             if (p.rc === 2 || menu[p.i].path === '@back') { target = ''; continue; }

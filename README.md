@@ -115,7 +115,7 @@ you sign in installs the plugins.
 
 **The `cc` menu** ([`windows/cc-launcher.js`](windows/cc-launcher.js)) lists
 the folders under `Projects` plus `os-changes` (this machine) and `misc` (small
-research). "↩ Pick up where you left off" shows your recent sessions as cards
+research). "↩ Pick up where you left off" shows your recent sessions, from any folder, as cards
 (what each was about, how many exchanges, how full its context is), and each
 folder offers continue / new / pick an earlier session. When a session's
 context runs red, "⚑ Wrap up & hand off" has Claude write `HANDOFF.md`, and the

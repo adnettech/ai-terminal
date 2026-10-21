@@ -39,6 +39,15 @@ if command -v node >/dev/null; then
     LH=$(mktemp -d); mkdir -p "$LH/Projects/alpha"
     printf '1\n' | HOME="$LH" CC_LAUNCHER_DRYRUN=1 node windows/cc-launcher.js 2>&1 \
         | grep -q "DRYRUN cwd=$LH/Projects/alpha :: .*--dangerously-skip-permissions" && ok "cc-launcher.js" || bad "cc-launcher.js"
+    # recall finds sessions wherever they ran (here: Projects itself, 10 days old, so the
+    # any-age fallback), and skips claude-mem's background sessions under a dot-folder
+    mkdir -p "$LH/.claude/projects/k1" "$LH/.claude/projects/k2" "$LH/.claude-mem/observer-sessions"
+    printf '{"type":"user","cwd":"%s","timestamp":"2026-01-01T00:00:00Z","message":{"content":"fix the printer"}}\n' "$LH/Projects" > "$LH/.claude/projects/k1/sess-a.jsonl"
+    touch -d '10 days ago' "$LH/.claude/projects/k1/sess-a.jsonl"
+    printf '{"type":"user","cwd":"%s","message":{"content":"observe"}}\n' "$LH/.claude-mem/observer-sessions" > "$LH/.claude/projects/k2/obs.jsonl"
+    R=$(printf '1\n1\n' | HOME="$LH" CC_LAUNCHER_DRYRUN=1 node windows/cc-launcher.js 2>&1)
+    { grep -q 'Pick up where you left off' <<<"$R" && grep -q "DRYRUN cwd=$LH/Projects :: .*--resume\" \"sess-a\"" <<<"$R" \
+        && ! grep -q observer <<<"$R"; } && ok "cc-launcher.js recall (any folder, no claude-mem)" || bad "cc-launcher.js recall: $R"
     rm -rf "$LH"
 fi
 

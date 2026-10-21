@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-21 — Windows `cc` menu: "Pick up where you left off" finds every session
+
+The recall row only looked in folders under `Projects`, so sessions from before the menu (run in
+`Projects` itself or the home folder) never showed and the menu opened on the bare project list.
+Recall now scans all of `~\.claude\projects`, takes each session's folder from the `cwd` its
+transcript records (the session folder's name can't be turned back into a path), and resumes it
+there. Skipped: folders that no longer exist and any under a dot-folder (claude-mem's background
+sessions in `~\.claude-mem`). With nothing in the last `CC_RECALL_DAYS` (5) days it shows the
+newest sessions of any age instead of hiding the row. Cards name the folder as `misc\topic`,
+`Projects` or `~\somewhere`. Smoke test covers it.
+
 ## 2026-10-21 — Windows: `ccinstall` keeps itself current
 
 A Windows box only got kit changes when someone re-ran `ccinstall`, so one installed before the
