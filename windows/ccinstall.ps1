@@ -376,7 +376,8 @@ function Write-Launchers {
         $lnk = $ws.CreateShortcut($path)
         if ($wt) {
             $lnk.TargetPath = $wt.Source
-            $lnk.Arguments  = '-p "Claude Code"'
+            # -w new: every click is its own window, whatever WT's windowingBehavior says
+            $lnk.Arguments  = '-w new -p "Claude Code"'
         } else {
             $lnk.TargetPath = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
             $lnk.Arguments  = (Get-CcCommandLine) -replace '^powershell\.exe ', ''

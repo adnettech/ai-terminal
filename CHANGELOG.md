@@ -15,7 +15,7 @@ app's `claude.exe` doesn't count as busy. A refresh leaves out a desktop shortcu
 deleted. Outcome in `%LOCALAPPDATA%\ai-terminal\update-last.json`, log in `update.log`; `-Update -Now`
 applies while busy; `-NoAutoUpdate` opts out. `-Verify` now also fails a terminal profile that
 skips the menu (an old install), and reports the shortcuts, the task and the last update.
-`-Uninstall` removes the task. `tests/ccinstall-update-test.sh` (pwsh, GitHub and processes
+`-Uninstall` removes the task. The shortcuts open Windows Terminal with `-w new`, so every click is a separate window (several Claude Code sessions side by side) even when WT is set to reuse its window. `tests/ccinstall-update-test.sh` (pwsh, GitHub and processes
 mocked) runs in CI.
 
 ## 2026-10-19 — the kit updates itself (04-auto-update, `ait-update`)

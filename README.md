@@ -109,7 +109,7 @@ you sign in installs the plugins.
 | 20-claude-mem, 25-superpowers | same plugins, same marketplaces |
 | 27-postlogin-finish | `cc` finishes the plugin installs on the first launch after sign-in |
 | 02-home-dirs | `%USERPROFILE%\Projects` |
-| 42-terminal-prefs | a **Claude Code** Windows Terminal profile (a fragment, so your WT settings stay untouched), plus Start-menu and desktop shortcuts with the Claude Code mascot icon that open the `cc` menu |
+| 42-terminal-prefs | a **Claude Code** Windows Terminal profile (a fragment, so your WT settings stay untouched), plus Start-menu and desktop shortcuts with the Claude Code mascot icon that open the `cc` menu, each click in a new window, so several sessions can run side by side |
 | 04-auto-update | a per-user scheduled task, `ai-terminal-update`, every 2 h and at sign-in: fetches the kit at the ref the box was installed from (`main` by default) and, if anything changed, applies it, but only while this user has no Claude Code running (`cc` menu included); otherwise it retries later. No admin rights, no window |
 | not ported | passwordless sudo, update policy, the GNOME desktop modules, `phonecc` (tmux), `ccssh` (Windows OpenSSH has no ControlMaster), `render-page` |
 
