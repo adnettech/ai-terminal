@@ -109,7 +109,9 @@ safe:
 - **Checks**: `verify.d/*.sh`, sourced near the end of `verify.sh` with `p`/`f`/`s`
   and every helper in scope.
 - **Launcher**: if `templates/cc-launcher.sh` exists, `10-claude-code` installs it
-  and points `cc` at it; otherwise `cc` is plain Claude Code.
+  as `~/.local/bin/cc-launcher` and points `cc` at it; otherwise the kit's own menu
+  (`windows/cc-launcher.js`, shared with Windows) goes there instead. Either way the
+  alias is `cc='cc-launcher'`.
 - **VERSION**: a release package carries a `VERSION` file; `verify.sh` reports it
   instead of git state.
 - Fleet boxes never run `get.sh` (it refuses on a managed box): their kit only

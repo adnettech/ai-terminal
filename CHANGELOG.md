@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-31 — Ubuntu: `cc` opens the workspace menu; auto-login warning
+
+On Ubuntu the public kit had no menu: `10-claude-code` only installed a launcher when a platform
+layer supplied `templates/cc-launcher.sh`, so `cc` was plain `claude --dangerously-skip-permissions`
+and nothing on the README's front page said so. `cc` now opens the same workspace menu as Windows
+(`windows/cc-launcher.js`, installed as `~/.local/bin/cc-launcher`; it stays under `windows/`
+because installed Windows boxes fetch it from that path): projects under `~/Projects`, `os-changes`,
+`misc`, "Pick up where you left off", hand-offs. A layer's `templates/cc-launcher.sh` still wins.
+Opt out with `~/.config/ai-terminal/no-cc-menu`. `phonecc` opens the menu inside tmux. `verify.sh`
+checks the menu is installed, current and on the alias. Existing boxes get it with the next update.
+
+`38-x11-session` now adds a NEXT STEPS line when `/etc/gdm3/custom.conf` has
+`AutomaticLoginEnable=true` (one checkbox in the Ubuntu installer): with no password at sign-in
+PAM can't unlock the GNOME login keyring, so the first app that needs a secret asks for it. Warn
+only; auto-login can be deliberate. `verify.sh` notes it as a SKIP line.
+
 ## 2026-10-21 — Windows `cc` menu: "Pick up where you left off" finds every session
 
 The recall row only looked in folders under `Projects`, so sessions from before the menu (run in

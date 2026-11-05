@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# ct-desc: Claude Code (official native installer) + cc/phonecc aliases + context-fill statusline + ccssh
+# ct-desc: Claude Code (official native installer) + cc workspace menu/phonecc aliases + context-fill statusline + ccssh
 
 if ! have claude; then
     log "installing Claude Code (native installer)"
@@ -36,13 +36,22 @@ if ! cmp -s "$SCRIPT_DIR/tools/ccssh.sh" "$HOME/.local/bin/ccssh"; then
     install -m 0755 "$SCRIPT_DIR/tools/ccssh.sh" "$HOME/.local/bin/ccssh" || fail "could not install ccssh"
 fi
 
-# `cc` = Claude Code with permission prompts off — the point of the box. A platform
-# that ships this kit inside a larger release may supply a workspace launcher as
-# templates/cc-launcher.sh; when it is present `cc` opens that instead.
+# `cc` = the workspace menu over ~/Projects (session recall, hand-offs), then Claude Code
+# with permission prompts off — the point of the box. The menu is the same Node launcher
+# the Windows install uses (windows/cc-launcher.js; Node comes from 05-node). A platform
+# that ships this kit inside a larger release may supply its own launcher as
+# templates/cc-launcher.sh; when it is present `cc` opens that instead. Opt out of the
+# menu (plain Claude Code): touch ~/.config/ai-terminal/no-cc-menu and re-run.
 CC_CMD='claude --dangerously-skip-permissions'
+CC_SRC=''
 if [ -f "$SCRIPT_DIR/templates/cc-launcher.sh" ]; then
-    if ! cmp -s "$SCRIPT_DIR/templates/cc-launcher.sh" "$HOME/.local/bin/cc-launcher"; then
-        install -m 0755 "$SCRIPT_DIR/templates/cc-launcher.sh" "$HOME/.local/bin/cc-launcher" \
+    CC_SRC="$SCRIPT_DIR/templates/cc-launcher.sh"
+elif [ ! -e "$HOME/.config/ai-terminal/no-cc-menu" ] && have node; then
+    CC_SRC="$SCRIPT_DIR/windows/cc-launcher.js"
+fi
+if [ -n "$CC_SRC" ]; then
+    if ! cmp -s "$CC_SRC" "$HOME/.local/bin/cc-launcher"; then
+        install -m 0755 "$CC_SRC" "$HOME/.local/bin/cc-launcher" \
             || fail "could not install cc-launcher into ~/.local/bin"
     fi
     CC_CMD='cc-launcher'

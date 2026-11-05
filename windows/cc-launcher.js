@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// cc — Claude Code workspace launcher for Windows. Installed by windows/ccinstall.ps1 as
-// %USERPROFILE%\.local\bin\cc-launcher.js; cc.cmd runs it.
+// cc — Claude Code workspace launcher, for Windows and Ubuntu. On Windows, windows/ccinstall.ps1
+// installs it as %USERPROFILE%\.local\bin\cc-launcher.js and cc.cmd runs it; on Ubuntu,
+// modules/core/10-claude-code.sh installs it as ~/.local/bin/cc-launcher and `cc` runs it.
+// (It stays under windows/: installed Windows boxes fetch it from this path to self-update.)
 //
-// A small menu over %USERPROFILE%\Projects so every session starts in the right folder with
-// the right CLAUDE.md loaded, and so getting back to earlier work never needs cd or claude's
-// flags. The generic half of the Ubuntu fleet launcher (templates/cc-launcher.sh in the
-// platform layer), without the engagement/fleet entries:
+// A small menu over ~/Projects so every session starts in the right folder with the right
+// CLAUDE.md loaded, and so getting back to earlier work never needs cd or claude's flags.
+// The generic half of the fleet launcher (templates/cc-launcher.sh in a platform layer,
+// which replaces this one where present), without the engagement/fleet entries:
 //
 //   <project>    any folder under Projects (major work; create one from the menu)
 //   os-changes   THIS machine: settings, troubleshooting, local system work
@@ -481,7 +483,7 @@ function mainMenu() {
     for (const d of PROJ_DIRS) m.push({ path: d, name: path.basename(d), desc: 'project' });
     m.push({ path: path.join(PROJECTS, 'os-changes'), name: 'os-changes', desc: 'this machine: settings & troubleshooting' });
     m.push({ path: path.join(PROJECTS, 'misc'), name: 'misc', desc: 'small research & everything else' });
-    m.push({ path: '@newproject', name: '+ New project…', desc: 'major project at Projects\\<name> (small research goes in misc)' });
+    m.push({ path: '@newproject', name: '+ New project…', desc: `major project at Projects${path.sep}<name> (small research goes in misc)` });
     // red-flag folders whose newest session is FULL: the wrap-up habit starts here
     for (const row of m) {
         if (row.path.startsWith('@')) continue;

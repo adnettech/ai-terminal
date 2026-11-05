@@ -42,4 +42,12 @@ fi
 if [ "$changed" = 1 ]; then
     next_step "Reboot (or log out to the GDM greeter) so the session switches from Wayland to X11 — remote control won't work until then."
 fi
+
+# Automatic login (one checkbox in the Ubuntu installer) means no password is typed at
+# sign-in, so PAM can't unlock the GNOME login keyring and the first app that needs a
+# stored secret pops an unlock dialog. Auto-login may be deliberate, so warn, never change.
+if grep -qiE '^[[:space:]]*AutomaticLoginEnable[[:space:]]*=[[:space:]]*(true|1)[[:space:]]*$' "$CONF" 2>/dev/null; then
+    next_step "Automatic login is on ($CONF), so the GNOME login keyring is not unlocked at sign-in and the first app that needs a saved secret asks for your password. To fix: Settings → System → Users → Automatic Login off. Or keep auto-login and accept that one prompt per session."
+    ok "Wayland disabled at GDM (X11 forced); automatic login is on — see NEXT STEPS"
+fi
 ok "Wayland disabled at GDM (X11 forced)"

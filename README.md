@@ -47,6 +47,8 @@ Then:
 2. Open a new shell — the first shell after login runs `cct-finish`, which
    installs the two plugin modules (claude-mem, superpowers).
 3. `./verify.sh` to confirm everything, and read the printed **NEXT STEPS**.
+4. Type `cc`: it opens the [workspace menu](#cc--the-workspace-menu) over
+   `~/Projects`, then Claude Code in the folder you pick.
 
 Extras are flags: `curl -fsSL https://get.adnet.tools | bash -s -- --with-docker --with-xrdp`
 (see `./bootstrap.sh --list` for everything). Updates come by themselves: a user
@@ -104,7 +106,7 @@ you sign in installs the plugins.
 | Ubuntu core | On Windows |
 |---|---|
 | 00-base-cli, 05-node, 15-bun, 30-uv | Git for Windows (required: Claude Code's Bash tool uses it), gh, jq, Node.js LTS, Bun, uv, all via winget (official installers for Bun/uv when winget is missing) |
-| 10-claude-code | official native installer; `%USERPROFILE%\.local\bin` on the user PATH; **`cc`** opens the workspace menu (below), then `claude --dangerously-skip-permissions` in the chosen folder. It's a `cc.cmd` shim, so it works in PowerShell, cmd and Windows Terminal without touching execution policy |
+| 10-claude-code | official native installer; `%USERPROFILE%\.local\bin` on the user PATH; **`cc`** opens the [workspace menu](#cc--the-workspace-menu), then `claude --dangerously-skip-permissions` in the chosen folder. It's a `cc.cmd` shim, so it works in PowerShell, cmd and Windows Terminal without touching execution policy |
 | context-fill statusline | `cc-statusline.js` (Node port: PowerShell 5.1 is too slow to start on every redraw, and its output isn't UTF-8), wired into `~\.claude\settings.json` unless you already have a statusLine |
 | 20-claude-mem, 25-superpowers | same plugins, same marketplaces |
 | 27-postlogin-finish | `cc` finishes the plugin installs on the first launch after sign-in |
@@ -113,14 +115,8 @@ you sign in installs the plugins.
 | 04-auto-update | a per-user scheduled task, `ai-terminal-update`, every 2 h and at sign-in: fetches the kit at the ref the box was installed from (`main` by default) and, if anything changed, applies it, but only while this user has no Claude Code running (`cc` menu included); otherwise it retries later. No admin rights, no window |
 | not ported | passwordless sudo, update policy, the GNOME desktop modules, `phonecc` (tmux), `ccssh` (Windows OpenSSH has no ControlMaster), `render-page` |
 
-**The `cc` menu** ([`windows/cc-launcher.js`](windows/cc-launcher.js)) lists
-the folders under `Projects` plus `os-changes` (this machine) and `misc` (small
-research). "↩ Pick up where you left off" shows your recent sessions, from any folder, as cards
-(what each was about, how many exchanges, how full its context is), and each
-folder offers continue / new / pick an earlier session. When a session's
-context runs red, "⚑ Wrap up & hand off" has Claude write `HANDOFF.md`, and the
-next visit offers "⇥ New session from hand-off". Arrow keys + Enter, Esc back,
-`?` help. `cc <folder>` skips the menu. A short tour runs on the first `cc`.
+**The `cc` menu** is the same one the Ubuntu kit installs (see
+[`cc` — the workspace menu](#cc--the-workspace-menu)), over `%USERPROFILE%\Projects`.
 
 **On a box that already has `cctemp`:** `ccinstall` converts the install to
 permanent. It removes the 30-day auto-cleanup task and the temporary marker,
@@ -184,7 +180,7 @@ immediately:
 | 03-updates-policy | never offers a release upgrade (no "Ubuntu 26.04 Upgrade Available" dialog); ordinary updates apply unattended, no automatic reboot, no Software Updater window — the only prompt left is "restart required" |
 | 04-auto-update | the kit keeps itself current: a user timer (`ai-terminal-update.timer`, every ~2 h) applies a new release when nobody is working on the box — no `claude` running, no unlocked desktop session — re-running bootstrap with the extras the box opted into. `ait-update --check` shows the state, `--now` applies at once; opt out with `touch ~/.config/ai-terminal/no-auto-update`. Not on fleet terminals (their platform ships the kit) |
 | 05-node | Node.js 20 (NodeSource) + user-owned npm prefix `~/.npm-global` |
-| 10-claude-code | Claude Code native install, `cc` / `phonecc` aliases, `cc-statusline` (live context-fill readout in every session), and **`ccssh`** — Claude Code wired to a remote server for one session (below) |
+| 10-claude-code | Claude Code native install, **`cc`** (the workspace menu, below) and `phonecc` aliases, `cc-statusline` (live context-fill readout in every session), and **`ccssh`** — Claude Code wired to a remote server for one session (below) |
 | 15-bun | Bun runtime (claude-mem's worker needs it) |
 | 20-claude-mem | [claude-mem](https://github.com/thedotmack/claude-mem) persistent memory (plugin, latest release) |
 | 25-superpowers | [superpowers](https://github.com/obra/superpowers) skills plugin |
@@ -199,13 +195,31 @@ immediately:
 | 46-switcher | Switcher window picker on Alt+\` — fuzzy, matches window **titles**, so you can pick between many terminals |
 | 50-okular-md | double-clicking a `.md` file opens it rendered (Okular) |
 
-The aliases the core adds (they're the point of the box — remove them from
-`~/.bashrc` if they're not your style):
+The aliases the core adds (they're the point of the box):
 
 ```bash
-alias cc='claude --dangerously-skip-permissions'
-alias phonecc='tmux new-session -A -s claude claude --dangerously-skip-permissions'
+alias cc='cc-launcher'                                     # the workspace menu, then Claude Code
+alias phonecc='tmux new-session -A -s claude cc-launcher'  # the same, inside tmux
 ```
+
+Whatever folder you pick, Claude Code starts as `claude --dangerously-skip-permissions`:
+**permission prompts are off**, which is the posture this kit is built for. Plain `claude`
+still asks before every action.
+
+### `cc` — the workspace menu
+
+[`windows/cc-launcher.js`](windows/cc-launcher.js) (Node; the same menu on Ubuntu and
+Windows) lists the folders under `~/Projects` plus `os-changes` (this machine) and
+`misc` (small research). "↩ Pick up where you left off" shows your recent sessions,
+from any folder, as cards (what each was about, how many exchanges, how full its
+context is), and each folder offers continue / new / pick an earlier session. When a
+session's context runs red, "⚑ Wrap up & hand off" has Claude write `HANDOFF.md`, and
+the next visit offers "⇥ New session from hand-off". Arrow keys + Enter, Esc back, `?`
+help. `cc <folder>` skips the menu. A short tour runs on the first `cc`.
+
+Rather have `cc` open plain Claude Code (prompts still off) with no menu?
+`mkdir -p ~/.config/ai-terminal && touch ~/.config/ai-terminal/no-cc-menu`, then re-run
+`./bootstrap.sh` and open a new shell. Delete the file and re-run to get the menu back.
 
 In the same spirit the core sets up **passwordless sudo** for the installing
 user (`01-sudo-nopasswd`) — a deliberate posture for a single-user workstation
@@ -279,7 +293,7 @@ A fleet platform can ship this kit inside its own release and add to it
 without forking: its files are layered onto the kit tree at release time —
 extra `modules/`, `lib/common.d/*.sh` helpers (sourced after `lib/common.sh`),
 `verify.d/*.sh` checks (sourced by `verify.sh`), and an optional
-`templates/cc-launcher.sh` that `cc` opens instead of plain Claude Code. A file
+`templates/cc-launcher.sh` that `cc` opens instead of the kit's own menu. A file
 that would overwrite a kit file is an error, never a silent override. The public
 kit ships none of these. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 

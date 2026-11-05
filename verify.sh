@@ -117,6 +117,22 @@ else
     f "ccssh missing or stale in ~/.local/bin (10-claude-code installs it — re-run ./bootstrap.sh)"
 fi
 
+# cc: a layer's launcher is checked by the layer's own verify.d; here, the kit's menu.
+if [ -f "$SCRIPT_DIR/templates/cc-launcher.sh" ]; then
+    :
+elif [ -e "$HOME/.config/ai-terminal/no-cc-menu" ]; then
+    if grep -q "^alias cc='claude --dangerously-skip-permissions'" "$HOME/.bashrc" 2>/dev/null; then
+        p "cc is plain Claude Code (menu opted out: ~/.config/ai-terminal/no-cc-menu)"
+    else
+        f "no-cc-menu is set but the cc alias still opens the menu (re-run ./bootstrap.sh)"
+    fi
+elif [ -x "$HOME/.local/bin/cc-launcher" ] && cmp -s "$SCRIPT_DIR/windows/cc-launcher.js" "$HOME/.local/bin/cc-launcher" \
+     && grep -q "^alias cc='cc-launcher'" "$HOME/.bashrc" 2>/dev/null; then
+    p "cc opens the workspace menu (cc-launcher)"
+else
+    f "cc workspace menu missing or stale, or cc doesn't open it (10-claude-code installs it — re-run ./bootstrap.sh)"
+fi
+
 if [ -x "$HOME/.local/bin/cct-finish" ] && grep -q 'claude-terminal postlogin-finish' "$HOME/.bashrc" 2>/dev/null; then
     p "cct-finish + post-login hook installed"
 else
@@ -266,6 +282,9 @@ elif [ -d /etc/gdm3 ]; then
         p "Wayland disabled at GDM (X11 forced)"
     else
         f "WaylandEnable=false not set in /etc/gdm3/custom.conf (RustDesk/Splashtop need X11)"
+    fi
+    if grep -qiE '^[[:space:]]*AutomaticLoginEnable[[:space:]]*=[[:space:]]*(true|1)[[:space:]]*$' /etc/gdm3/custom.conf 2>/dev/null; then
+        s "automatic login is on — the GNOME login keyring won't unlock at sign-in (first app needing a secret prompts); Settings → System → Users → Automatic Login"
     fi
 else
     s "no GDM on this box (session comes from xrdp/etc.) — Wayland check n/a"
