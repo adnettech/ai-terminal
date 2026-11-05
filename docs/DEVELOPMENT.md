@@ -163,18 +163,20 @@ run and re-execs itself inside it.
 
 ## Roadmap
 
-- **Roll out self-updating (04-auto-update, on main since 2026-10-19, not yet tagged).**
-  Deferred 2026-10-29; push at a later date. The newest tag (v2026.10.01-6) has no updater,
-  so nothing installed today can pick this up by itself. In order:
-  1. Validate on one plain box: run the one-liner with `AIT_REF=main`, then `./verify.sh`
-     (auto-update line PASS) and `ait-update --check`.
-  2. Tag the kit (`vYYYY.MM.DD`) and push the tag. From here the one-liner installs the updater.
-  3. Platform: `fleet kit-bump <tag>`, add `tests/auto-update-test.sh` to `fleet/test.sh`,
-     `fleet release` — fleet terminals take it at their next free tick (the module skips there;
-     the release also carries the idle-compaction pin, platform changelog 2026-10-19).
-  4. Every existing public-kit box: one more manual run of the one-liner (or push it once via
-     RMM) — the last hands-on update any of them needs. New boxes get it from the tag.
-  5. Later: signed release tags, verified by `ait-update` before it applies one.
+- **Finish the self-update rollout (tagged v2026.11.05).** `04-auto-update` sat on main from
+  2026-10-19 with no tag; v2026.11.05 (2026-11-05) is the first release that carries it, plus the
+  Ubuntu `cc` workspace menu and the auto-login keyring warning. Done: validated on one plain box
+  with `AIT_REF=main` (`verify.sh` PASS, `ait-update --check`, `cc` opens the menu); tagged and
+  pushed. Still to do, in order:
+  1. Platform: `fleet kit-bump v2026.11.05`, add `tests/auto-update-test.sh` to `fleet/test.sh`,
+     `fleet release` — fleet terminals take it at their next free tick (the auto-update module
+     skips there and a layer's `templates/cc-launcher.sh` still replaces the menu; the release
+     also carries the idle-compaction pin, platform changelog 2026-10-19).
+  2. Every existing public-kit box: one more manual run of the one-liner (or push it once via
+     RMM) — the last hands-on update any of them needs. New boxes get it from the tag. The
+     validation box was installed with `AIT_REF=main`: re-run the one-liner there without it so
+     it pins to releases again.
+  3. Later: signed release tags, verified by `ait-update` before it applies one.
 - **More agents** as opt-in modules (Codex, Gemini, xAI CLIs): an agent module
   installs the CLI, says how to sign in (NEXT STEPS), and adds its own alias. A
   platform can refuse one on a restricted box from its layer.
