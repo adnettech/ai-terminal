@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-05 — installer says when `cc` needs a new terminal
+
+Validating the Ubuntu menu on a plain box: the install worked, but the terminal that ran it
+still had the old `cc` alias until it was closed and reopened. `10-claude-code` now adds a
+NEXT STEPS line on the run that changes the `cc` alias (first install, or the menu arriving on
+an older box): open a new terminal or `source ~/.bashrc`. Re-runs that change nothing stay quiet.
+
 ## 2026-10-31 — Ubuntu: `cc` opens the workspace menu; auto-login warning
 
 On Ubuntu the public kit had no menu: `10-claude-code` only installed a launcher when a platform

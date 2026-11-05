@@ -56,6 +56,10 @@ if [ -n "$CC_SRC" ]; then
     fi
     CC_CMD='cc-launcher'
 fi
+# A shell that is already open keeps the alias it started with, so say so once, on the
+# run that changes `cc` (first install, or the menu arriving on an older box) — never on
+# a re-run where nothing moved.
+CC_ALIAS_BEFORE="$(grep -F "alias cc=" "$HOME/.bashrc" 2>/dev/null | tail -1)"
 append_block "$HOME/.bashrc" "claude-terminal aliases" <<EOF
 # DCV/cloud sessions skip the login-shell pass through ~/.profile, so the
 # claude install dir must go on PATH here in .bashrc.
@@ -63,6 +67,9 @@ case ":\$PATH:" in *":\$HOME/.local/bin:"*) ;; *) export PATH="\$HOME/.local/bin
 alias cc='$CC_CMD'
 alias phonecc='tmux new-session -A -s claude $CC_CMD'
 EOF
+if [ "$(grep -F "alias cc=" "$HOME/.bashrc" | tail -1)" != "$CC_ALIAS_BEFORE" ]; then
+    next_step "Open a new terminal (or run: source ~/.bashrc) — 'cc' changed, and a shell that was already open still has the old one."
+fi
 
 # (No next_step here when logged out — the dispatcher already queues the
 # login reminder, and two differently-worded copies survive the dedup.)
