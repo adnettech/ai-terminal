@@ -24,7 +24,7 @@ tag** and layers its own files on top (see *Layers*).
 | `modules/core/NN-*.sh` | always run, lexical order |
 | `modules/extra/<flag>.sh` | run when `--with-<flag>` given |
 | `assets/` | data files modules load |
-| `tools/` | standalone helpers installed to `~/.local/bin` by modules (`ait-update`, `cct-finish`, `cc-statusline`, `render-page`, …) |
+| `tools/` | standalone helpers installed to `~/.local/bin` by modules (`ait-update`, `ait-components`, `cct-finish`, `cc-statusline`, `render-page`, …) |
 | `verify.sh` | read-only PASS/FAIL/SKIP state check; sources `verify.d/*.sh` if a layer supplies any |
 | `windows/` | runs on Windows, not on the box: Hyper-V VM builder, `cctemp` (temporary install), `ccinstall` (permanent install, the Windows twin of the Claude Code modules; keep it ASCII and 5.1-compatible) |
 | `audit/system-audit.sh` | full machine snapshot for diffing two boxes |
@@ -112,6 +112,12 @@ safe:
   as `~/.local/bin/cc-launcher` and points `cc` at it; otherwise the kit's own menu
   (`windows/cc-launcher.js`, shared with Windows) goes there instead. Either way the
   alias is `cc='cc-launcher'`.
+- **Component updates**: `26-component-updates` runs on a layered box too, and updates
+  the plugins, runtimes and the kit's own third-party apt packages daily. A layer module
+  that installs an apt package from a third-party repository and wants it kept current
+  adds its name, one per line, to `~/.config/ai-terminal/component-packages` (only
+  packages that are installed are ever asked for; they update when the box is free). A
+  tool a layer pins and checksums stays pinned: it moves with the layer's releases.
 - **VERSION**: a release package carries a `VERSION` file; `verify.sh` reports it
   instead of git state.
 - Fleet boxes never run `get.sh` (it refuses on a managed box): their kit only
@@ -177,6 +183,14 @@ run and re-execs itself inside it.
      validation box was installed with `AIT_REF=main`: re-run the one-liner there without it so
      it pins to releases again.
   3. Later: signed release tags, verified by `ait-update` before it applies one.
+- **Component updates (2026-11-25, on main, not tagged).** `26-component-updates` /
+  `ait-components` and the Windows plugin updates are tested with fakes and against an
+  isolated Claude config, not yet on a bootstrapped box. Before the tag: one plain box with
+  `AIT_REF=main` — `verify.sh` PASS, `ait-components --check`, one real `ait-components` run,
+  `systemctl --user list-timers` shows the timer. Left out on purpose: Node's major version
+  (`05-node` pins 20, whose upstream support ended 2026-04 — moving to the current LTS is a
+  kit change of its own), the Splashtop streamer (its own .deb, no repository), winget
+  packages on Windows (machine-wide ones need UAC).
 - **More agents** as opt-in modules (Codex, Gemini, xAI CLIs): an agent module
   installs the CLI, says how to sign in (NEXT STEPS), and adds its own alias. A
   platform can refuse one on a restricted box from its layer.

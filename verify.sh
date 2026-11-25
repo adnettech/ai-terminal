@@ -491,6 +491,27 @@ else
     esac
 fi
 
+# ---- 26-component-updates ------------------------------------------------------
+# Offline, like the block above: a symlink says the timer is enabled, a stamp file what
+# the last run did. A failed component is a SKIP line, not a failure of the box: it is
+# still installed and working, just not the newest, and tomorrow's run retries it.
+CU_LAST="$HOME/.local/state/ai-terminal/components-last"
+CU_WANT="$HOME/.config/systemd/user/timers.target.wants/ai-terminal-components.timer"
+if [ -e "$AU_CONF/no-component-update" ]; then
+    s "component updates opted out ($AU_CONF/no-component-update) — run ait-components by hand to update"
+elif [ ! -x "$HOME/.local/bin/ait-components" ] || [ ! -e "$CU_WANT" ]; then
+    f "component updates not installed or not enabled (26-component-updates — re-run ./bootstrap.sh)"
+else
+    CU_RES=$(sed -n 's/^result=//p' "$CU_LAST" 2>/dev/null); CU_AT=$(sed -n 's/^at=//p' "$CU_LAST" 2>/dev/null)
+    CU_UP=$(sed -n 's/^updated=//p' "$CU_LAST" 2>/dev/null); CU_BAD=$(sed -n 's/^failed=//p' "$CU_LAST" 2>/dev/null)
+    CU_WAIT=$(sed -n 's/^waiting=//p' "$CU_LAST" 2>/dev/null)
+    case "$CU_RES" in
+        ok)     p "component updates on (daily): last run $CU_AT${CU_UP:+, updated $CU_UP}${CU_WAIT:+, waiting for a free box: $CU_WAIT}" ;;
+        failed) s "component updates: last run $CU_AT could not update $CU_BAD — see ~/.local/state/ai-terminal/components.log (retried daily; by hand: ait-components)" ;;
+        *)      p "component updates enabled (daily); no run yet" ;;
+    esac
+fi
+
 # ---- layers ------------------------------------------------------------------
 # A platform that ships this kit inside a larger release adds its own checks as
 # verify.d/*.sh — sourced here in name order, with p/f/s and every lib helper in

@@ -113,6 +113,7 @@ you sign in installs the plugins.
 | 02-home-dirs | `%USERPROFILE%\Projects` |
 | 42-terminal-prefs | a **Claude Code** Windows Terminal profile (a fragment, so your WT settings stay untouched), plus Start-menu and desktop shortcuts with the Claude Code mascot icon that open the `cc` menu, each click in a new window, so several sessions can run side by side |
 | 04-auto-update | a per-user scheduled task, `ai-terminal-update`, every 2 h and at sign-in: fetches the kit at the ref the box was installed from (`main` by default) and, if anything changed, applies it, but only while this user has no Claude Code running (`cc` menu included); otherwise it retries later. No admin rights, no window |
+| 26-component-updates | the same task, once a day: every plugin installed for the user (claude-mem, superpowers, any you added) is updated from its marketplace. Tools installed with winget are not touched (machine-wide ones need a UAC prompt): `winget upgrade` those yourself |
 | not ported | passwordless sudo, update policy, the GNOME desktop modules, `phonecc` (tmux), `ccssh` (Windows OpenSSH has no ControlMaster), `render-page` |
 
 **The `cc` menu** is the same one the Ubuntu kit installs (see
@@ -136,6 +137,8 @@ recording when and by whom the install was made.
 (`%LOCALAPPDATA%\ai-terminal\ccinstall.ps1 -Update`). It refreshes the menu,
 statusline, `cc.cmd`, terminal profile, shortcuts and the script itself. It never
 runs winget or touches sign-in. Re-running `ccinstall` by hand still repairs those.
+Once a day the same task also updates the plugins (off on its own: create
+`%LOCALAPPDATA%\ai-terminal\no-component-update`).
 Each run is logged to `%LOCALAPPDATA%\ai-terminal\update.log`, and `-Verify`
 reports the last outcome. A box installed before self-update existed (before
 2026-10-21) needs one more run of the install one-liner to get the task.
@@ -184,6 +187,7 @@ immediately:
 | 15-bun | Bun runtime (claude-mem's worker needs it) |
 | 20-claude-mem | [claude-mem](https://github.com/thedotmack/claude-mem) persistent memory (plugin, latest release) |
 | 25-superpowers | [superpowers](https://github.com/obra/superpowers) skills plugin |
+| 26-component-updates | what the kit installed stays current between kit releases: a user timer (`ai-terminal-components.timer`, once a day) updates Claude Code, every plugin installed for the user (claude-mem, superpowers, any you added), bun, uv, the `usagemeter` checkout, and the third-party apt packages the kit installed (Node.js, Docker, Tailscale — Ubuntu's own packages are 03-updates-policy's job). Plugins and runtimes update at any time (a session picks the new version up when it next starts); system packages wait for a free box, and Docker also for no running container. `ait-components --check` lists what is covered, `ait-components` runs it now; more apt packages: one name per line in `~/.config/ai-terminal/component-packages`; opt out with `touch ~/.config/ai-terminal/no-component-update`. Runs on fleet terminals too |
 | 27-postlogin-finish | `cct-finish` + a `.bashrc` hook: the first shell after `claude` login finishes the plugin installs automatically |
 | 30-uv | uv/uvx — also **the kit's standard for tool venvs** (`uv venv ~/.venvs/<tool>`); `python3-venv` is deliberately not installed |
 | 31-render-page | `render-page <url> [--click <text>]... [--json]` — reads a JavaScript-only page in the box's Chrome (Playwright, headless, own venv) and prints its text; `--json` lists the page's JSON/XHR calls |

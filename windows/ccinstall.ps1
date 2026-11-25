@@ -139,6 +139,8 @@ $NoUpdate  = Join-Path $StateDir 'no-auto-update'
 $UpdLog    = Join-Path $StateDir 'update.log'
 $UpdLast   = Join-Path $StateDir 'update-last.json'
 $Staging   = Join-Path $StateDir 'staging'
+$NoCompUpd = Join-Path $StateDir 'no-component-update'
+$CompLast  = Join-Path $StateDir 'components-last.json'
 # Repo file -> where it is installed. A changed ccinstall.ps1 stands for everything it
 # generates (cc.cmd, the terminal profile, the shortcuts), so these four cover the kit.
 $KitFiles  = [ordered]@{
@@ -506,6 +508,54 @@ function Invoke-SelfUpdate {
     else { Write-UpdateResult 'failed' ("refresh: " + (($r.Out.Trim() -split "`n" | Select-Object -Last 2) -join ' ')) $commit }
 }
 
+function Invoke-ComponentUpdate {
+    # The plugins move on their own schedule, not the kit's: ccinstall installs them once and
+    # nothing updated them after. Once a day, from the self-update task, every plugin installed
+    # for this user (claude-mem, superpowers, any added since) is updated from its marketplace.
+    # A running session keeps the version it started with and picks the new one up next time,
+    # so this does not wait for Claude Code to be idle. A marketplace that declares a command
+    # to run is never accepted here: without -y the CLI refuses it and the plugin shows as failed.
+    # Off: the self-update opt-out, or a file named no-component-update beside it.
+    if ((Test-Path $NoUpdate) -or (Test-Path $NoCompUpd)) { return }
+    if (-not $Now -and (Test-Path $CompLast)) {
+        try {
+            $at = [datetime]::Parse((Get-Content $CompLast -Raw | ConvertFrom-Json).at)
+            if (((Get-Date) - $at).TotalHours -lt 20) { return }
+        } catch { }
+    }
+    Update-SessionPath
+    if (-not (Have claude)) { return }
+    $plugins = @()
+    try {
+        $plugins = @(((Invoke-Quiet { claude plugin list --json }).Out | ConvertFrom-Json) |
+            Where-Object { $_.scope -eq 'user' -and $_.id -notmatch '@builtin$' })
+    } catch { }
+    $updated = @(); $failed = @()
+    if ($plugins.Count) {
+        if ((Invoke-Quiet { claude plugin marketplace update }).Code -ne 0) { $failed += 'marketplaces' }
+        foreach ($p in $plugins) {
+            $id = "$($p.id)"; $name = ($id -split '@')[0]
+            $r = Invoke-Quiet { claude plugin update $id --json }
+            if ($r.Code -ne 0) { $failed += $name; continue }
+            try {
+                $j = ($r.Out.Trim() -split "`n" | Select-Object -Last 1) | ConvertFrom-Json
+                if ($j.newVersion -and "$($j.newVersion)" -ne "$($p.version)") { $updated += "$name $($p.version) -> $($j.newVersion)" }
+            } catch { }
+        }
+    }
+    $result = if ($failed.Count) { 'failed' } else { 'ok' }
+    $msg = "components: $($plugins.Count) plugin(s) checked"
+    if ($updated.Count) { $msg += ", updated $($updated -join ', ')" }
+    if ($failed.Count)  { $msg += ", could not update $($failed -join ', ')" }
+    Say $msg
+    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+    $log = @(if (Test-Path $UpdLog) { Get-Content $UpdLog | Select-Object -Last 199 })
+    $log += "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) [$Ref] $msg"
+    Write-Utf8NoBom $UpdLog (($log -join "`r`n") + "`r`n")
+    @{ result = $result; at = (Get-Date).ToString('o'); updated = ($updated -join ', '); failed = ($failed -join ', ') } |
+        ConvertTo-Json | ForEach-Object { Write-Utf8NoBom $CompLast $_ }
+}
+
 function Save-LocalCopy {
     # Local copy: cc.cmd runs -Finish from it, and the self-update task runs -Update from it.
     New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
@@ -592,6 +642,14 @@ function Invoke-Verify {
             if ($u.result -eq 'failed') { S $line } else { P $line }
         } catch { S 'update-last.json unreadable' }
     } elseif (-not (Test-Path $NoUpdate)) { S 'self-update has not run yet' }
+    if (Test-Path $NoCompUpd) { S "plugin updates off ($NoCompUpd)" }
+    elseif (Test-Path $CompLast) {
+        try {
+            $c = Get-Content $CompLast -Raw | ConvertFrom-Json
+            $line = "last plugin update check: $($c.result) $($c.at)$(if ($c.updated) { " - updated $($c.updated)" })$(if ($c.failed) { " - could not update $($c.failed)" })"
+            if ($c.result -eq 'failed') { S $line } else { P $line }
+        } catch { S 'components-last.json unreadable' }
+    }
     if (Test-SignedIn) {
         P 'signed in'
         $pl = (Invoke-Quiet { claude plugin list }).Out
@@ -692,6 +750,6 @@ function Invoke-Refresh {
 if ($Verify)        { Invoke-Verify }
 elseif ($Uninstall) { Invoke-Uninstall }
 elseif ($Finish)    { Update-SessionPath; Say 'finishing plugin setup'; Install-Plugins; Show-Next }
-elseif ($Update)    { Invoke-SelfUpdate }
+elseif ($Update)    { Invoke-SelfUpdate; Invoke-ComponentUpdate }
 elseif ($Refresh)   { Invoke-Refresh }
 else                { Invoke-Install }

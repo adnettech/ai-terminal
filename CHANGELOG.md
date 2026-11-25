@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-11-25 — components stay current: plugins, runtimes, third-party packages
+
+Bootstrap installs what is missing and leaves what is there, so a kit release never moved a
+plugin or a runtime: a box kept the claude-mem, superpowers, bun and uv of the day it was set
+up, and Node.js, Docker and Tailscale sat outside unattended-upgrades' origins (Ubuntu's own
+packages only). New core module `26-component-updates` installs `ait-components`
+(`tools/ait-components.sh`) and a daily user timer, `ai-terminal-components.timer`:
+
+- **Claude Code** (`claude update`; skipped where `DISABLE_AUTOUPDATER` pins it), **every plugin
+  installed for the user** from its marketplace (so one added later is covered too), **bun**,
+  **uv**, the **usagemeter** checkout. These run whenever the timer fires: a running session
+  keeps the version it started with.
+- **Third-party apt packages the kit installed** (Node.js, Docker, Tailscale) and any named in
+  `~/.config/ai-terminal/component-packages`. These restart services, so they wait for a free
+  box (no `claude` process, no unlocked desktop session); Docker also waits while a container
+  runs. Needs passwordless sudo; without it they are skipped, never prompted for.
+- One component failing never stops the others. `ait-components --check` lists what is covered
+  and changes nothing; `--now` skips the wait. Log and last outcome under
+  `~/.local/state/ai-terminal/`; `verify.sh` reports the last run. Opt out:
+  `touch ~/.config/ai-terminal/no-component-update`.
+- Unlike `04-auto-update` it runs on every box, a fleet terminal included: it is about the
+  components, not the kit's checkout.
+- **Windows**: the `ai-terminal-update` task also updates the user's plugins once a day
+  (`ccinstall.ps1`, `Invoke-ComponentUpdate`); `-Verify` reports it. winget packages are not
+  touched. Opt out on its own: `%LOCALAPPDATA%\ai-terminal\no-component-update`.
+
+Tests: `tests/components-test.sh` (fakes, no network), six new cases in the Windows update test.
+
 ## 2026-11-25 — `cc` menu: a list taller than the window scrolls
 
 With more folders under `~/Projects` than the terminal has lines (about 45 on a 22-line window),

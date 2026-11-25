@@ -59,4 +59,36 @@ New-Item -ItemType File $NoUpdate | Out-Null
 Invoke-SelfUpdate 6>$null
 Check 'opt-out -> skipped' ((Last).result -eq 'skipped')
 Check 'log has one line per run' (@(Get-Content $UpdLog).Count -eq 7)
+
+# ---- plugin updates (Invoke-ComponentUpdate): a fake claude with three plugins -------------
+Remove-Item $NoUpdate
+$NoCompUpd = Join-Path $StateDir 'no-component-update'; $CompLast = Join-Path $StateDir 'components-last.json'
+function Update-SessionPath { }
+function Have($c) { $true }
+$global:calls = @(); $global:ver = @{ 'claude-mem' = '16.0.0'; 'superpowers' = '7.0.0' }
+$global:newer = @{ 'claude-mem' = '16.1.0' }; $global:broken = @()
+function claude {
+    $global:calls += ($args -join ' '); $global:LASTEXITCODE = 0
+    if ("$args" -eq 'plugin list --json') {
+        '[{"id":"claude-mem@thedotmack","version":"' + $global:ver['claude-mem'] + '","scope":"user"},' +
+        '{"id":"superpowers@superpowers-marketplace","version":"' + $global:ver['superpowers'] + '","scope":"user"},' +
+        '{"id":"team@somewhere","version":"1.0.0","scope":"project"},{"id":"cc-plugin-x@builtin","version":"unknown","scope":"user"}]'
+    } elseif ($args[0] -eq 'plugin' -and $args[1] -eq 'update') {
+        $n = ($args[2] -split '@')[0]
+        if ($global:broken -contains $n) { $global:LASTEXITCODE = 1; return 'failed' }
+        if ($global:newer[$n]) { $global:ver[$n] = $global:newer[$n]; $global:newer.Remove($n) }
+        'Checking for updates'; '{"outcome":"ok","newVersion":"' + $global:ver[$n] + '"}'
+    }
+}
+function CLast { (Get-Content $CompLast -Raw | ConvertFrom-Json) }
+Invoke-ComponentUpdate 6>$null
+Check 'plugins: the newer claude-mem is reported, superpowers current' ((CLast).result -eq 'ok' -and (CLast).updated -eq 'claude-mem 16.0.0 -> 16.1.0')
+Check 'plugins: marketplaces refreshed, then each user plugin' (($global:calls -join '|') -match 'plugin marketplace update\|plugin update claude-mem@thedotmack --json\|plugin update superpowers@superpowers-marketplace --json')
+Check 'plugins: project-scope and built-in plugins left alone' (-not (($global:calls -join '|') -match 'team@|builtin'))
+$global:calls = @(); Invoke-ComponentUpdate 6>$null
+Check 'plugins: at most once a day' ($global:calls.Count -eq 0)
+$Now = $true; $global:broken = @('claude-mem'); $global:newer = @{ 'superpowers' = '7.1.0' }; Invoke-ComponentUpdate 6>$null; $Now = $false
+Check 'plugins: one failing does not stop the next' ((CLast).result -eq 'failed' -and (CLast).failed -eq 'claude-mem' -and (CLast).updated -eq 'superpowers 7.0.0 -> 7.1.0')
+New-Item -ItemType File $NoCompUpd | Out-Null; $global:calls = @(); $Now = $true; Invoke-ComponentUpdate 6>$null; $Now = $false
+Check 'plugins: opt-out file -> nothing runs' ($global:calls.Count -eq 0)
 exit $fail
