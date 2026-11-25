@@ -48,6 +48,23 @@ if command -v node >/dev/null; then
     R=$(printf '1\n1\n' | HOME="$LH" CC_LAUNCHER_DRYRUN=1 node windows/cc-launcher.js 2>&1)
     { grep -q 'Pick up where you left off' <<<"$R" && grep -q "DRYRUN cwd=$LH/Projects :: .*--resume\" \"sess-a\"" <<<"$R" \
         && ! grep -q observer <<<"$R"; } && ok "cc-launcher.js recall (any folder, no claude-mem)" || bad "cc-launcher.js recall: $R"
+    # the arrow-key menu on a 22-line pseudo-terminal with 43 projects (46 rows, twice what
+    # fits): the first row is on screen, End reaches the last, nothing scrolls off the top,
+    # and typing 12 opens row 12 (tests/pty-menu.py plays the keys and snapshots the screen)
+    if command -v python3 >/dev/null; then
+        mkdir -p "$LH/tall/.local/state/cc-launcher"; : > "$LH/tall/.local/state/cc-launcher/tour-done"
+        for i in $(seq -w 1 43); do mkdir -p "$LH/tall/Projects/proj-$i"; done
+        tall() { local o=$1; shift; HOME="$LH/tall" CC_LAUNCHER_DRYRUN=1 TERM=xterm python3 tests/pty-menu.py 22 100 "$o" "$@" -- node "$PWD/windows/cc-launcher.js" >/dev/null 2>&1; }
+        tall "$LH/o1" "snap:$LH/s1" 'key:\x1b[F' "snap:$LH/s2" 'key:\x1b[5~' "snap:$LH/s3" 'key:q'
+        { grep -q '▸  1  proj-01' "$LH/s1" && grep -q '↓ 33 more below' "$LH/s1" && ! grep -q 'more above' "$LH/s1" \
+            && grep -q '▸ 46  + New project' "$LH/s2" && grep -q '↑ 33 more above' "$LH/s2" && ! grep -q 'proj-01' "$LH/s2" \
+            && grep -q '▸ 33  proj-33' "$LH/s3" && grep -qx 'scrolled=0' "$LH/o1"; } \
+            && ok "cc-launcher.js tall menu scrolls (Home/End/PgUp)" || bad "cc-launcher.js tall menu: $(cat "$LH/s1" "$LH/s2" "$LH/s3" 2>&1 | head -70)"
+        tall "$LH/o2" 'key:12'; tall "$LH/o3" 'key:4' 'wait:1'; tall "$LH/o4" 'key:7'
+        { grep -q "DRYRUN cwd=$LH/tall/Projects/proj-12 " "$LH/o2" && grep -q "DRYRUN cwd=$LH/tall/Projects/proj-04 " "$LH/o3" \
+            && grep -q "DRYRUN cwd=$LH/tall/Projects/proj-07 " "$LH/o4"; } \
+            && ok "cc-launcher.js two-digit jump" || bad "cc-launcher.js two-digit jump: $(tail -3 "$LH/o2" "$LH/o3" "$LH/o4" 2>&1)"
+    fi
     rm -rf "$LH"
 fi
 

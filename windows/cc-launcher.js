@@ -22,7 +22,8 @@
 //     visit to that folder offers "⇥ New session from hand-off".
 //   - a one-time 3-screen tour on the first run; ? shows help on any screen.
 //
-// Keys: arrows/j/k + Enter, 1-9 jump, Esc back, ? help, q quit. Without a console (pipes,
+// Keys: arrows/j/k + Enter, numbers jump (two digits past 9), PgUp/PgDn/Home/End, Esc back,
+// ? help, q quit; a list taller than the window scrolls. Without a console (pipes,
 // tests) it falls back to a numbered prompt. `cc <folder>` skips the menu; other arguments
 // pass through to claude. CC_LAUNCHER_DRYRUN=1 prints the claude command instead of running it.
 'use strict';
@@ -58,6 +59,7 @@ const E = (s) => (FANCY ? s : '');
 const C0 = E('\x1b[0m'), DIM = E('\x1b[2m'), BOLD = E('\x1b[1m'), ACC = E('\x1b[36m');
 const WARN = E('\x1b[33m'), RED = E('\x1b[31m'), INV = E('\x1b[7m');
 const cols = () => process.stdout.columns || 100;
+const rows = () => process.stdout.rows || 24;
 const out = (s) => process.stdout.write(s);
 const HOST = os.hostname().split('.')[0] || 'terminal';
 
@@ -109,9 +111,19 @@ function keysStop() {
     process.stdin.pause();
     keyQueue = [];
 }
-function readKey() {
-    return new Promise((r) => { if (keyQueue.length) r(keyQueue.shift()); else keyWaiter = r; });
+function readKey(ms) {   // ms: give up after that long and resolve null
+    return new Promise((r) => {
+        if (keyQueue.length) return r(keyQueue.shift());
+        let t = null;
+        keyWaiter = (k) => { if (t) clearTimeout(t); r(k); };
+        if (ms) t = setTimeout(() => { keyWaiter = null; r(null); }, ms);
+    });
 }
+// a resized window repaints the menu that is waiting for a key (it reads as the key 'resize')
+let wakeOnResize = false;
+process.stdout.on('resize', () => {
+    if (wakeOnResize && keyWaiter) { const w = keyWaiter; keyWaiter = null; w('resize'); }
+});
 
 // line input, in both modes (cursor shown while typing in fancy mode)
 let plainRl = null;
@@ -157,10 +169,24 @@ async function pick(menu, sub, plainPrompt, opt = {}) {
         return { rc: 0, i: n - 1 };
     }
     ui_open(); keysStart();
-    let cur = 0;
+    // viewport: only the rows that fit the window are drawn, scrolled to keep the cursor in
+    // view ("↑ N more above" / "↓ N more below"). A list taller than the window used to push
+    // its first rows off the top, out of reach. rh = screen lines a row takes (card rows: +2).
+    const n = menu.length;
+    const rh = menu.map((m) => (m.meta ? m.meta.split('\n').length + 2 : 1));
+    let cur = 0, top = 0;
     for (;;) {
+        // header 4, ↑/↓ markers 2, footer 2, the cursor's own line 1 (+2 for a hint)
+        const avail = Math.max(3, rows() - 9 - (opt.hint ? 2 : 0));
+        if (cur < top) top = cur;
+        const span = (a, b) => { let u = 0; for (let j = a; j <= b; j++) u += rh[j]; return u; };
+        while (top < cur && span(top, cur) > avail) top++;
+        let last = top;                                   // the top row is drawn even if oversized
+        while (last + 1 < n && span(top, last + 1) <= avail) last++;
         let f = '\x1b[H' + header(sub);
-        menu.forEach((m, i) => {
+        f += top > 0 ? `    ${DIM}↑ ${top} more above${C0}\x1b[K\n` : '\x1b[K\n';
+        for (let i = top; i <= last; i++) {
+            const m = menu[i];
             const num = String(i + 1).padStart(2);
             let desc = m.desc || '';
             // truncate BEFORE styling: cutting a styled string can lose the reset code
@@ -176,18 +202,31 @@ async function pick(menu, sub, plainPrompt, opt = {}) {
                 }
                 f += '\x1b[K\n';
             }
-        });
+        }
+        f += last < n - 1 ? `    ${DIM}↓ ${n - 1 - last} more below${C0}\x1b[K\n` : '\x1b[K\n';
         if (opt.hint) f += `\x1b[K\n  ${DIM}${opt.hint}${C0}\x1b[K\n`;
-        f += `\x1b[K\n  ${DIM}↑↓ move · Enter open · 1-9 jump · Esc back${opt.help ? ' · ? help' : ''} · q quit${C0}\x1b[K\n\x1b[J`;
+        f += `\x1b[K\n  ${DIM}↑↓ move · Enter open · ${n > 9 ? 'type a number to' : '1-9'} jump · Esc back${opt.help ? ' · ? help' : ''} · q quit${C0}\x1b[K\n\x1b[J`;
         out(f);
+        wakeOnResize = true;
         const k = await readKey();
-        if (k === '\x1b[A' || k === '\x1bOA' || k === 'k') cur = cur > 0 ? cur - 1 : menu.length - 1;
-        else if (k === '\x1b[B' || k === '\x1bOB' || k === 'j') cur = cur < menu.length - 1 ? cur + 1 : 0;
+        wakeOnResize = false;
+        if (k === '\x1b[A' || k === '\x1bOA' || k === 'k') cur = cur > 0 ? cur - 1 : n - 1;
+        else if (k === '\x1b[B' || k === '\x1bOB' || k === 'j') cur = cur < n - 1 ? cur + 1 : 0;
+        else if (k === '\x1b[5~') cur = Math.max(0, cur - avail);             // PgUp
+        else if (k === '\x1b[6~') cur = Math.min(n - 1, cur + avail);         // PgDn
+        else if (['\x1b[H', '\x1bOH', '\x1b[1~', '\x1b[7~', 'g'].includes(k)) cur = 0;       // Home
+        else if (['\x1b[F', '\x1bOF', '\x1b[4~', '\x1b[8~', 'G'].includes(k)) cur = n - 1;   // End
         else if (k === '\x1b') return { rc: 2 };
         else if (k === '\r' || k === '\n') return { rc: 0, i: cur };
         else if (k === 'q' || k === 'Q' || k === '\x03') { ui_close(); return { rc: 1 }; }
         else if (k === '?' && opt.help) { textPage('help', opt.help, 'Press any key to go back'); await readKey(); out('\x1b[H\x1b[J'); }
-        else if (/^[1-9]$/.test(k) && +k <= menu.length) return { rc: 0, i: +k - 1 };
+        else if (/^[1-9]$/.test(k)) {
+            // two-digit jump: when this digit could start a 10-99 row, a second digit within
+            // a moment makes it one; a pause or any other key takes the single digit
+            let num = +k;
+            if (num * 10 <= n) { const d = await readKey(800); if (d !== null && /^[0-9]$/.test(d)) num = num * 10 + +d; }
+            if (num <= n) return { rc: 0, i: num - 1 };
+        }
     }
 }
 

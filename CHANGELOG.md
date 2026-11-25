@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-25 — `cc` menu: a list taller than the window scrolls
+
+With more folders under `~/Projects` than the terminal has lines (about 45 on a 22-line window),
+the `cc` menu printed every row: the first ones scrolled off the top and could not be reached,
+and the number keys only went to 9. The menu (`windows/cc-launcher.js`, Windows and Ubuntu) now
+draws what fits and scrolls with the cursor ("↑ N more above" / "↓ N more below"), repaints when
+the window is resized, takes two-digit numbers (a second digit within a moment makes 10-99), and
+adds PgUp / PgDn / Home / End (`g` / `G`). The numbered fallback without a console is unchanged.
+`tests/pty-menu.py` drives the menu on a pseudo-terminal for `tests/smoke.sh`. Reported by a
+user with 45 projects, with a patch for the bash launcher a platform layer ships.
+
 ## 2026-11-05 — installer says when `cc` needs a new terminal
 
 Validating the Ubuntu menu on a plain box: the install worked, but the terminal that ran it
