@@ -174,19 +174,17 @@ run and re-execs itself inside it.
   Ubuntu `cc` workspace menu and the auto-login keyring warning. Done: validated on one plain box
   with `AIT_REF=main` (`verify.sh` PASS, `ait-update --check`, `cc` opens the menu); tagged and
   pushed. Still to do, in order:
-  1. Platform: `fleet kit-bump v2026.11.05`, add `tests/auto-update-test.sh` to `fleet/test.sh`,
-     `fleet release` — fleet terminals take it at their next free tick (the auto-update module
-     skips there and a layer's `templates/cc-launcher.sh` still replaces the menu; the release
-     also carries the idle-compaction pin, platform changelog 2026-10-19).
+  1. Done 2026-11-25: the platform pins kit v2026.11.25 and released it; fleet terminals take
+     it at their next free tick or wake.
   2. Every existing public-kit box: one more manual run of the one-liner (or push it once via
      RMM) — the last hands-on update any of them needs. New boxes get it from the tag. The
      validation box was installed with `AIT_REF=main`: re-run the one-liner there without it so
      it pins to releases again.
   3. Later: signed release tags, verified by `ait-update` before it applies one.
-- **Component updates (2026-11-25, on main, not tagged).** `26-component-updates` /
-  `ait-components` and the Windows plugin updates are tested with fakes and against an
-  isolated Claude config, not yet on a bootstrapped box. Before the tag: one plain box with
-  `AIT_REF=main` — `verify.sh` PASS, `ait-components --check`, one real `ait-components` run,
+- **Component updates (tagged v2026.11.25, 2026-11-25).** `26-component-updates` /
+  `ait-components` and the Windows plugin updates were tagged tested with fakes and against an
+  isolated Claude config, not on a bootstrapped box. Still to check on the first box that
+  takes it: `verify.sh` PASS, `ait-components --check`, one real `ait-components` run,
   `systemctl --user list-timers` shows the timer. Left out on purpose: Node's major version
   (`05-node` pins 20, whose upstream support ended 2026-04 — moving to the current LTS is a
   kit change of its own), the Splashtop streamer (its own .deb, no repository), winget
